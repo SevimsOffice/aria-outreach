@@ -1,16 +1,13 @@
-name: ARIA Reply Handler
+name: ARIA Diagnose
 
 on:
-  schedule:
-    # Every 2 hours
-    - cron: '0 */2 * * *'
-  workflow_dispatch: {}
+  workflow_dispatch: {}   # Sadece manuel tetikleme
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  check-replies:
+  diagnose:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -27,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Check and classify replies
+      - name: Run diagnostic
         env:
           ANTHROPIC_API_KEY:            ${{ secrets.ANTHROPIC_API_KEY }}
           GOOGLE_SERVICE_ACCOUNT_JSON:  ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
@@ -36,4 +33,4 @@ jobs:
           INSTANTLY_CAMPAIGN_ID:        ${{ secrets.INSTANTLY_CAMPAIGN_ID }}
           TELEGRAM_BOT_TOKEN:           ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:             ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python scripts/run_reply_handler.py
+        run: python scripts/diagnose.py
