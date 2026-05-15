@@ -9,36 +9,48 @@ import re
 logger = logging.getLogger(__name__)
 
 
-def deduplicate(prospects: list[dict], existing_domains: set[str]) -> list[dict]:
+def deduplicate(
+    prospects: list[dict],
+    existing_domains: set[str],
+    existing_names: set[str] | None = None,
+) -> list[dict]:
     """
-    Filter out:
-    - Companies whose domain already exists in the master sheet
-    - Records with no company name
-    - Records that look like junk (empty, test entries, etc.)
-    Returns only genuinely new prospects.
+    Filter out companies already in the master sheet.
+
+    Checks by domain (primary) AND by company name (secondary — catches NOSAB
+    companies which start with no domain but were already processed before).
     """
     fresh = []
     skipped_dupe = 0
     skipped_invalid = 0
 
+    # Mutable copies so we can add intra-batch entries
+    seen_domains = set(existing_domains)
+    seen_names = set(existing_names or [])
+
     for p in prospects:
         domain = p.get("Domain", "").lower().strip()
-        name = p.get("Company_Name", "").strip()
+        name   = p.get("Company_Name", "").strip()
+        name_key = name.lower()
 
         if not name or len(name) < 3:
             skipped_invalid += 1
             continue
 
-        if not domain:
-            # No domain — keep but mark as needing enrichment
-            pass
-        elif domain in existing_domains:
+        # Domain match — skip if we've seen this domain before
+        if domain and domain in seen_domains:
+            skipped_dupe += 1
+            continue
+
+        # Name match — skip if this exact company name is already in the sheet
+        if name_key in seen_names:
             skipped_dupe += 1
             continue
 
         fresh.append(p)
         if domain:
-            existing_domains.add(domain)  # Prevent intra-batch dupes
+            seen_domains.add(domain)
+        seen_names.add(name_key)
 
     logger.info(
         f"Dedup: {len(fresh)} new | {skipped_dupe} already in sheet | {skipped_invalid} invalid"

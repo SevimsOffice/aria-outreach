@@ -31,9 +31,10 @@ load_dotenv()
 
 from src.config import get_config
 from src.database.sheets_client import SheetsClient
-from src.scraper.nosab_scraper import scrape_nosab
+from src.scraper.nosab_scraper import scrape_nosab, scrape_nosab_detail
 from src.scraper.dosab_scraper import scrape_dosab
 from src.scraper.kayapa_scraper import scrape_kayapa
+from src.scraper.base_scraper import get_session
 from src.scraper.deduplicator import merge_sources, deduplicate, validate_and_clean
 from src.enrichment.apollo_client import ApolloClient
 from src.enrichment.hunter_client import HunterClient
@@ -84,7 +85,8 @@ def run(dry_run: bool = False, limit: int = 50):
     # --- Step 2: Deduplicate ---
     logger.info("Step 2: Deduplicating...")
     existing_domains = sheets.get_existing_domains()
-    fresh = deduplicate(all_scraped, existing_domains)
+    existing_names   = sheets.get_existing_company_names()
+    fresh = deduplicate(all_scraped, existing_domains, existing_names)
     fresh = validate_and_clean(fresh)
     fresh = fresh[:limit]
     logger.info(f"New companies to process: {len(fresh)}")
@@ -98,6 +100,9 @@ def run(dry_run: bool = False, limit: int = 50):
     emails_sent = 0
     new_prospects_added = 0
 
+    # Shared session for NOSAB detail page fetching
+    nosab_session = get_session()
+
     for i, company in enumerate(fresh):
         name    = company["Company_Name"]
         domain  = company.get("Domain", "")
@@ -106,9 +111,37 @@ def run(dry_run: bool = False, limit: int = 50):
 
         logger.info(f"Processing [{i+1}/{len(fresh)}]: {name}")
 
+        # Step 2.5: For NOSAB companies, fetch detail page to get email + domain
+        # This runs BEFORE Apollo/Hunter so we use real contact data from the OSB site
+        if osb == "NOSAB" and company.get("detail_url") and not company.get("Email"):
+            logger.info(f"  Fetching NOSAB detail page for {name}")
+            detail = scrape_nosab_detail(nosab_session, company["detail_url"])
+            if detail.get("email"):
+                company["Email"] = detail["email"]
+                logger.info(f"  Found email from NOSAB detail: {detail['email']}")
+            if detail.get("domain") and not domain:
+                company["Domain"] = detail["domain"]
+                domain = detail["domain"]
+            if detail.get("phone") and not company.get("Phone"):
+                company["Phone"] = detail["phone"]
+            if detail.get("sector") and not sector:
+                company["Sector"] = detail["sector"]
+                sector = detail["sector"]
+
         # Step 3: Enrich email
         contact = None
-        if domain:
+
+        # Use email scraped directly from OSB site (highest quality — verified address)
+        if company.get("Email"):
+            contact = {
+                "email":      company["Email"],
+                "first_name": "",
+                "last_name":  "",
+                "title":      "",
+                "source":     f"{osb.lower()}_direct",
+            }
+        elif domain:
+            # Fallback: Apollo → Hunter → pattern guesser
             if apollo:
                 contact = apollo.find_contact_by_domain(domain, name)
             if not contact and hunter:

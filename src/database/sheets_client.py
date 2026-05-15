@@ -77,6 +77,14 @@ class SheetsClient:
         records = self._ws.get_all_records()
         return {r["Domain"].lower().strip() for r in records if r.get("Domain")}
 
+    def get_existing_company_names(self) -> set[str]:
+        """Return set of normalized company names already in the master sheet."""
+        records = self._ws.get_all_records()
+        return {
+            r["Company_Name"].lower().strip()
+            for r in records if r.get("Company_Name")
+        }
+
     def get_prospects_to_contact(self, limit: int = 50) -> list[dict]:
         """
         Return prospects ready for first outreach:

@@ -149,17 +149,50 @@ def check_telegram():
 
 check("Telegram bot + mesaj gönderimi", check_telegram)
 
-# 7. Quick scraper test
-print("\n── 7. NOSAB Scraper (ilk 3 firma) ──")
-def check_scraper():
+# 7. NOSAB Scraper — listing pages
+print("\n── 7. NOSAB Scraper (listing pages A-Z) ──")
+def check_nosab_listing():
     from src.scraper.nosab_scraper import scrape_nosab
     results = scrape_nosab()
     if not results:
         raise ValueError("Hiç firma bulunamadı — site yapısı değişmiş olabilir")
     sample = results[0]
-    return f"{len(results)} firma | örnek: {sample['Company_Name']} ({sample.get('Domain', 'domain yok')})"
+    return f"{len(results)} firma bulundu | ilk: {sample['Company_Name']}"
 
-check("NOSAB scraper", check_scraper)
+check("NOSAB listing scraper", check_nosab_listing)
+
+# 7b. NOSAB detail page — test on first company
+print("\n── 7b. NOSAB Detail Page (1 firma detayı) ──")
+def check_nosab_detail():
+    import requests
+    from src.scraper.nosab_scraper import scrape_nosab, scrape_nosab_detail
+    from src.scraper.base_scraper import get_session
+    results = scrape_nosab()
+    if not results:
+        raise ValueError("Listing scraper failed — cannot test detail page")
+    # Find first company that has a detail URL
+    for r in results:
+        if r.get("detail_url"):
+            session = get_session()
+            detail = scrape_nosab_detail(session, r["detail_url"])
+            email = detail.get("email", "—")
+            domain = detail.get("domain", "—")
+            return f"{r['Company_Name']} → email: {email} | domain: {domain}"
+    raise ValueError("No company with detail_url found")
+
+check("NOSAB detail page", check_nosab_detail)
+
+# 7c. DOSAB Excel download
+print("\n── 7c. DOSAB Excel Scraper ──")
+def check_dosab():
+    from src.scraper.dosab_scraper import scrape_dosab
+    results = scrape_dosab()
+    if not results:
+        raise ValueError("Excel indirildi ama firma bulunamadı — sütun yapısı değişmiş olabilir")
+    sample = results[0]
+    return f"{len(results)} firma | örnek: {sample['Company_Name']} | email: {sample.get('Email', '—')}"
+
+check("DOSAB Excel scraper", check_dosab)
 
 print("\n═══════════════════════════════════")
 print("  Diagnostic tamamlandı.")
