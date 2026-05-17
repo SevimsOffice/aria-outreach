@@ -44,6 +44,7 @@ class CompanyResearcher:
             sector=sector,
             osb=osb,
             website_text=website_text[:MAX_WEBSITE_CHARS] if website_text else "Web sitesi erişilemedi.",
+            MAX_CHARS=MAX_WEBSITE_CHARS,
         )
 
         try:

@@ -14,9 +14,9 @@ Kategori tanımları:
 - OUT_OF_OFFICE: Otomatik yanıt / tatil / izin mesajı
 
 Şu JSON formatında yanıt ver (başka hiçbir şey yazma):
-{
+{{
   "category": "HOT/WARM/COLD/UNSUBSCRIBE/OUT_OF_OFFICE",
   "summary": "Tek cümle Türkçe açıklama — ne istediğini özetle",
   "suggested_response": "Eğer HOT veya WARM ise: kısa, doğal bir Türkçe yanıt taslağı (max 50 kelime). Diğer kategoriler için boş string.",
   "confidence": 85
-}
+}}
