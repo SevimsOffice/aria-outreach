@@ -48,20 +48,20 @@ class InstantlyClient:
         Custom variables map to {{personalized_line}}, {{sector}}, {{osb}} in templates.
         """
         payload = {
-            "api_key": self._api_key,
+            "api_key":     self._api_key,
             "campaign_id": self._campaign_id,
-            "skip_if_in_workspace": True,   # Don't duplicate contacts
             "leads": [
                 {
-                    "email": email,
-                    "first_name": first_name or "",
-                    "last_name": last_name or "",
+                    "email":        email,
+                    "first_name":   first_name or "",
+                    "last_name":    last_name or "",
                     "company_name": company_name or "",
-                    "custom_variables": {
-                        "personalized_line": personalized_line,
-                        "sector": sector,
-                        "osb": osb,
-                    },
+                    # Instantly v1: personalization is a flat string field
+                    # used as {{personalization}} in email templates
+                    "personalization": personalized_line,
+                    # Extra custom variables stored as flat key-value pairs
+                    "sector": sector,
+                    "osb":    osb,
                 }
             ],
         }
@@ -72,13 +72,26 @@ class InstantlyClient:
                 headers=self._headers,
                 timeout=20,
             )
+            # Log full response for debugging
+            logger.info(f"Instantly HTTP {resp.status_code} for {email}: {resp.text[:300]}")
             if resp.status_code == 429:
-                logger.warning("Instantly rate limit hit")
+                logger.warning("Instantly rate limit hit — waiting 60s")
+                import time; time.sleep(60)
+                return None
+            if resp.status_code == 400:
+                logger.error(f"Instantly 400 Bad Request for {email}: {resp.text[:500]}")
+                return None
+            if resp.status_code == 401:
+                logger.error("Instantly 401 Unauthorized — check INSTANTLY_API_KEY secret")
+                return None
+            if resp.status_code == 404:
+                logger.error(f"Instantly 404 — check INSTANTLY_CAMPAIGN_ID: {self._campaign_id}")
                 return None
             resp.raise_for_status()
             data = resp.json()
-            logger.info(f"Added to Instantly: {email} → {data}")
-            return data
+            # Instantly can return {} or {"status":"ok"} — treat both as success
+            logger.info(f"Instantly contact added: {email}")
+            return data if data else {"status": "ok"}
         except requests.RequestException as e:
             logger.error(f"Instantly add_contact error for {email}: {e}")
             return None
