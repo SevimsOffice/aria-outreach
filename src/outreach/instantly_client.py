@@ -1,39 +1,50 @@
 """
 Instantly.ai API client — adds contacts to campaigns and fetches replies.
 Instantly handles all sequence logic (timing, follow-ups, unsubscribes).
-API docs: https://developer.instantly.ai
+
+API versions:
+  v1 (legacy) — GET endpoints still work with ?api_key= query param
+  v2 (current) — POST /leads requires Authorization: Bearer header
 """
 
 import logging
-from datetime import datetime, timezone
+import time
 
 import requests
 
 logger = logging.getLogger(__name__)
 
-INSTANTLY_BASE = "https://api.instantly.ai/api/v1"
+# v1 still works for read-only GET endpoints (campaign list, stats, replies)
+INSTANTLY_V1 = "https://api.instantly.ai/api/v1"
+# v2 required for write operations (add leads)
+INSTANTLY_V2 = "https://api.instantly.ai/api/v2"
 
 
 class InstantlyClient:
     def __init__(self, api_key: str, campaign_id: str):
-        self._api_key = api_key
+        self._api_key    = api_key
         self._campaign_id = campaign_id
-        # Instantly requires Bearer token in Authorization header for POST endpoints.
-        # GET endpoints (campaign/list, analytics) still accept api_key as query param.
-        self._headers = {
+
+        # v2 uses Bearer token for all requests
+        self._headers_v2 = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        }
+        # v1 uses Bearer too but also passes api_key in query params for GET
+        self._headers_v1 = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
         }
 
-    def _params(self, extra: dict = None) -> dict:
-        """Query params for GET requests — include api_key for v1 endpoints."""
+    def _v1_params(self, extra: dict = None) -> dict:
+        """Query params for v1 GET requests."""
         p = {"api_key": self._api_key}
         if extra:
             p.update(extra)
         return p
 
     # ------------------------------------------------------------------ #
-    #  Contact management                                                  #
+    #  Contact management (v2)                                             #
     # ------------------------------------------------------------------ #
 
     def add_contact(
@@ -47,63 +58,82 @@ class InstantlyClient:
         osb: str = "",
     ) -> dict | None:
         """
-        Add a contact to the active campaign.
-        Returns Instantly response dict, or None on failure.
-        Custom variables map to {{personalized_line}}, {{sector}}, {{osb}} in templates.
+        Add a contact to the active campaign via Instantly API v2.
+
+        v2 endpoint: POST /api/v2/leads
+        Auth: Authorization: Bearer {api_key}
+        Personalization: {{personalization}} variable in email template.
         """
-        # api_key goes in Authorization header — NOT in body (causes 401)
         payload = {
-            "campaign_id": self._campaign_id,
-            "leads": [
-                {
-                    "email":           email,
-                    "first_name":      first_name or "",
-                    "last_name":       last_name or "",
-                    "company_name":    company_name or "",
-                    "personalization": personalized_line,   # {{personalization}} in templates
-                    "sector":          sector,
-                    "osb":             osb,
-                }
-            ],
+            "campaign_id":    self._campaign_id,
+            "email":          email,
+            "first_name":     first_name or "",
+            "last_name":      last_name or "",
+            "company_name":   company_name or "",
+            # {{personalization}} is the standard Instantly custom variable
+            "personalization": personalized_line,
+            # Additional custom variables (available as {{sector}}, {{osb}} in templates)
+            "variables": {
+                "sector": sector,
+                "osb":    osb,
+            },
         }
+
         try:
             resp = requests.post(
-                f"{INSTANTLY_BASE}/lead/add",
+                f"{INSTANTLY_V2}/leads",
                 json=payload,
-                headers=self._headers,
+                headers=self._headers_v2,
                 timeout=20,
             )
-            # Log full response for debugging
-            logger.info(f"Instantly HTTP {resp.status_code} for {email}: {resp.text[:300]}")
+            logger.info(f"Instantly v2 HTTP {resp.status_code} for {email}: {resp.text[:300]}")
+
             if resp.status_code == 429:
-                logger.warning("Instantly rate limit hit — waiting 60s")
-                import time; time.sleep(60)
+                logger.warning("Instantly rate limit — waiting 60s")
+                time.sleep(60)
+                return None
+            if resp.status_code == 401:
+                logger.error(
+                    "Instantly 401 Unauthorized. Your API key may be wrong or expired.\n"
+                    "Go to Instantly dashboard → Settings → API Keys → copy the key → "
+                    "update INSTANTLY_API_KEY in GitHub Secrets."
+                )
+                return None
+            if resp.status_code == 404:
+                logger.error(
+                    f"Instantly 404 — campaign not found.\n"
+                    f"Current INSTANTLY_CAMPAIGN_ID: {self._campaign_id}\n"
+                    "Go to Instantly → your campaign URL → copy the UUID from the URL."
+                )
                 return None
             if resp.status_code == 400:
                 logger.error(f"Instantly 400 Bad Request for {email}: {resp.text[:500]}")
                 return None
-            if resp.status_code == 401:
-                logger.error("Instantly 401 Unauthorized — check INSTANTLY_API_KEY secret")
-                return None
-            if resp.status_code == 404:
-                logger.error(f"Instantly 404 — check INSTANTLY_CAMPAIGN_ID: {self._campaign_id}")
-                return None
+            if resp.status_code == 422:
+                # Contact already exists — treat as success (idempotent)
+                logger.info(f"Instantly: contact {email} already exists in campaign")
+                return {"status": "already_exists"}
+
             resp.raise_for_status()
             data = resp.json()
-            # Instantly can return {} or {"status":"ok"} — treat both as success
-            logger.info(f"Instantly contact added: {email}")
+            logger.info(f"Instantly: contact added ✓ {email}")
             return data if data else {"status": "ok"}
+
         except requests.RequestException as e:
             logger.error(f"Instantly add_contact error for {email}: {e}")
             return None
+
+    # ------------------------------------------------------------------ #
+    #  Campaign stats (v1 GET — still works)                              #
+    # ------------------------------------------------------------------ #
 
     def get_campaign_stats(self) -> dict:
         """Fetch high-level campaign statistics."""
         try:
             resp = requests.get(
-                f"{INSTANTLY_BASE}/analytics/campaign/summary",
-                params=self._params({"campaign_id": self._campaign_id}),
-                headers=self._headers,
+                f"{INSTANTLY_V1}/analytics/campaign/summary",
+                params=self._v1_params({"campaign_id": self._campaign_id}),
+                headers=self._headers_v1,
                 timeout=15,
             )
             resp.raise_for_status()
@@ -113,49 +143,48 @@ class InstantlyClient:
             return {}
 
     # ------------------------------------------------------------------ #
-    #  Reply fetching                                                      #
+    #  Reply fetching (v1 GET — still works)                              #
     # ------------------------------------------------------------------ #
 
     def get_replies(self, since_timestamp: str = "") -> list[dict]:
         """
         Fetch replies received since a given ISO timestamp.
         Returns list of reply objects:
-          {from_email, subject, body, lead_email, reply_time, campaign_id}
+          {from_email, subject, body, lead_email, reply_time, email_id}
         """
         try:
-            params = self._params({
+            params = self._v1_params({
                 "campaign_id": self._campaign_id,
                 "limit": 100,
             })
             resp = requests.get(
-                f"{INSTANTLY_BASE}/unibox/emails",
+                f"{INSTANTLY_V1}/unibox/emails",
                 params=params,
-                headers=self._headers,
+                headers=self._headers_v1,
                 timeout=20,
             )
             resp.raise_for_status()
-            data = resp.json()
+            data  = resp.json()
             emails = data.get("emails", data) if isinstance(data, dict) else data
 
             replies = []
             for email in emails:
-                # Filter to only inbound (replies, not sent)
                 if email.get("email_type") not in ("reply", "inbound", 1, "1"):
                     continue
-                # Filter by timestamp if provided
                 if since_timestamp:
                     reply_time = email.get("created_at", email.get("timestamp", ""))
                     if reply_time and reply_time <= since_timestamp:
                         continue
                 replies.append({
                     "from_email": email.get("from_address", email.get("from_email", "")),
-                    "subject": email.get("subject", ""),
-                    "body": _clean_reply_body(email.get("body", email.get("text", ""))),
+                    "subject":    email.get("subject", ""),
+                    "body":       _clean_reply_body(email.get("body", email.get("text", ""))),
                     "lead_email": email.get("lead_email", email.get("to_address", "")),
                     "reply_time": email.get("created_at", email.get("timestamp", "")),
-                    "email_id": email.get("id", ""),
+                    "email_id":   email.get("id", ""),
                 })
             return replies
+
         except requests.RequestException as e:
             logger.error(f"Instantly get_replies error: {e}")
             return []
@@ -164,24 +193,22 @@ class InstantlyClient:
         """How many leads are currently in the campaign."""
         try:
             resp = requests.get(
-                f"{INSTANTLY_BASE}/lead/list",
-                params=self._params({"campaign_id": self._campaign_id, "limit": 1}),
-                headers=self._headers,
+                f"{INSTANTLY_V1}/lead/list",
+                params=self._v1_params({"campaign_id": self._campaign_id, "limit": 1}),
+                headers=self._headers_v1,
                 timeout=15,
             )
             resp.raise_for_status()
-            data = resp.json()
-            return data.get("total", 0)
+            return resp.json().get("total", 0)
         except requests.RequestException:
             return 0
 
 
 def _clean_reply_body(body: str) -> str:
-    """Remove quoted/forwarded content from reply body to get just the new text."""
+    """Strip quoted/forwarded content so only the new reply text remains."""
     if not body:
         return ""
     import re
-    # Remove common reply separators
     patterns = [
         r"-----Original Message-----.*",
         r"On .+wrote:.*",
@@ -191,4 +218,4 @@ def _clean_reply_body(body: str) -> str:
     ]
     for pattern in patterns:
         body = re.sub(pattern, "", body, flags=re.DOTALL | re.IGNORECASE)
-    return body.strip()[:2000]  # Cap at 2000 chars
+    return body.strip()[:2000]
