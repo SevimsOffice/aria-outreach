@@ -202,10 +202,14 @@ def run(dry_run: bool = False, limit: int = 50):
             new_prospects_added += 1
             # Update Google Sheet
             sheets.add_prospects([company])
-            sheets.update_status(domain, {
-                "ARIA_Status": "Added_to_Instantly",
-                "Email1_Date": __import__("datetime").date.today().isoformat(),
-            })
+            sheets.update_status(
+                domain=domain,
+                email=email,       # Fallback for NOSAB companies with no domain
+                fields={
+                    "ARIA_Status": "Added_to_Instantly",
+                    "Email1_Date": __import__("datetime").date.today().isoformat(),
+                },
+            )
         else:
             errors.append(f"Instantly failed for {name}")
 

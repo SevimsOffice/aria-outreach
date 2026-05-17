@@ -149,17 +149,30 @@ class SheetsClient:
         logger.info(f"Added {len(rows)} prospects to sheet")
         return len(rows)
 
-    def update_status(self, domain: str, fields: dict[str, Any]):
-        """Update one or more columns for the row matching the given domain."""
+    def update_status(self, domain: str, fields: dict[str, Any], email: str = ""):
+        """
+        Update one or more columns for the row matching the given domain.
+        Falls back to matching by email when domain is empty (e.g. NOSAB companies).
+        """
         records = self._ws.get_all_records()
+        domain_key = domain.lower().strip()
+        email_key  = email.lower().strip()
+
         for i, record in enumerate(records, start=2):  # row 1 = header
-            if record.get("Domain", "").lower().strip() == domain.lower().strip():
+            row_domain = record.get("Domain", "").lower().strip()
+            row_email  = record.get("Email", "").lower().strip()
+
+            match = (domain_key and row_domain == domain_key) or \
+                    (email_key  and row_email  == email_key  and not domain_key)
+
+            if match:
                 for col_name, value in fields.items():
                     if col_name in COLUMNS:
                         col_idx = COLUMNS.index(col_name) + 1
                         self._ws.update_cell(i, col_idx, value)
                 return True
-        logger.warning(f"Domain not found in sheet for update: {domain}")
+
+        logger.warning(f"Row not found for update: domain={domain!r} email={email!r}")
         return False
 
     # ------------------------------------------------------------------ #
