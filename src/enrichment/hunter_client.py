@@ -15,12 +15,24 @@ class HunterClient:
     def __init__(self, api_key: str):
         self._api_key = api_key
 
+    # Domains that must never be searched — social media, video platforms, etc.
+    _BLOCKED_DOMAINS = {
+        "youtube.com", "youtu.be", "facebook.com", "instagram.com",
+        "twitter.com", "x.com", "linkedin.com", "tiktok.com",
+        "google.com", "maps.google.com", "gmail.com", "hotmail.com",
+        "yandex.com", "apple.com", "microsoft.com", "amazon.com",
+        "whatsapp.com", "telegram.org", "zoom.us",
+    }
+
     def find_email_by_domain(self, domain: str) -> dict | None:
         """
         Search Hunter.io domain for any verified email.
         Returns dict with email, first_name, last_name, position or None.
         """
         if not self._api_key or not domain:
+            return None
+        if domain.lower() in self._BLOCKED_DOMAINS:
+            logger.warning(f"Hunter: skipping blocked/social domain: {domain}")
             return None
 
         try:

@@ -110,6 +110,13 @@ def scrape_nosab_detail(session, detail_url: str) -> dict:
 
     full_text = soup.get_text(separator=" ", strip=True)
 
+    # Domains to skip when extracting company website
+    _SOCIAL_DOMAINS = {
+        "youtube.com", "youtu.be", "facebook.com", "instagram.com",
+        "twitter.com", "x.com", "linkedin.com", "tiktok.com",
+        "google.com", "maps.google.com", "whatsapp.com",
+    }
+
     # ── Website ──────────────────────────────────────────────────────────────
     for a in soup.find_all("a", href=True):
         href = a["href"].strip()
@@ -121,7 +128,7 @@ def scrape_nosab_detail(session, detail_url: str) -> dict:
             continue
         if href.startswith("http") or href.startswith("www"):
             domain = extract_domain(href)
-            if domain and "." in domain:
+            if domain and "." in domain and domain not in _SOCIAL_DOMAINS:
                 result["domain"] = domain
                 break
 

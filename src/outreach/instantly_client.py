@@ -18,11 +18,15 @@ class InstantlyClient:
     def __init__(self, api_key: str, campaign_id: str):
         self._api_key = api_key
         self._campaign_id = campaign_id
+        # Instantly requires Bearer token in Authorization header for POST endpoints.
+        # GET endpoints (campaign/list, analytics) still accept api_key as query param.
         self._headers = {
             "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
         }
 
     def _params(self, extra: dict = None) -> dict:
+        """Query params for GET requests — include api_key for v1 endpoints."""
         p = {"api_key": self._api_key}
         if extra:
             p.update(extra)
@@ -47,21 +51,18 @@ class InstantlyClient:
         Returns Instantly response dict, or None on failure.
         Custom variables map to {{personalized_line}}, {{sector}}, {{osb}} in templates.
         """
+        # api_key goes in Authorization header — NOT in body (causes 401)
         payload = {
-            "api_key":     self._api_key,
             "campaign_id": self._campaign_id,
             "leads": [
                 {
-                    "email":        email,
-                    "first_name":   first_name or "",
-                    "last_name":    last_name or "",
-                    "company_name": company_name or "",
-                    # Instantly v1: personalization is a flat string field
-                    # used as {{personalization}} in email templates
-                    "personalization": personalized_line,
-                    # Extra custom variables stored as flat key-value pairs
-                    "sector": sector,
-                    "osb":    osb,
+                    "email":           email,
+                    "first_name":      first_name or "",
+                    "last_name":       last_name or "",
+                    "company_name":    company_name or "",
+                    "personalization": personalized_line,   # {{personalization}} in templates
+                    "sector":          sector,
+                    "osb":             osb,
                 }
             ],
         }

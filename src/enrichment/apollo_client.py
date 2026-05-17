@@ -19,6 +19,14 @@ class ApolloClient:
             "Cache-Control": "no-cache",
         }
 
+    _BLOCKED_DOMAINS = {
+        "youtube.com", "youtu.be", "facebook.com", "instagram.com",
+        "twitter.com", "x.com", "linkedin.com", "tiktok.com",
+        "google.com", "maps.google.com", "gmail.com", "hotmail.com",
+        "yandex.com", "apple.com", "microsoft.com", "amazon.com",
+        "whatsapp.com", "telegram.org", "zoom.us",
+    }
+
     def find_contact_by_domain(self, domain: str, company_name: str = "") -> dict | None:
         """
         Search for decision-maker email at a given company domain.
@@ -26,6 +34,9 @@ class ApolloClient:
         Returns dict with keys: email, first_name, last_name, title or None.
         """
         if not self._api_key or not domain:
+            return None
+        if domain.lower() in self._BLOCKED_DOMAINS:
+            logger.warning(f"Apollo: skipping blocked/social domain: {domain}")
             return None
 
         payload = {
