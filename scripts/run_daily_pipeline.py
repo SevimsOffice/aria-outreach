@@ -147,7 +147,11 @@ def run(dry_run: bool = False, limit: int = 50):
             if not contact and hunter:
                 contact = hunter.find_email_by_domain(domain)
             if not contact:
-                contact = best_guess(domain)
+                contact = best_guess(domain=domain, company_name=name)
+        else:
+            # No domain and no OSB email (e.g. DOSAB Excel companies) —
+            # derive a domain from the company name and generate a pattern guess
+            contact = best_guess(domain="", company_name=name)
 
         if not contact or not contact.get("email"):
             logger.info(f"  No email found for {name} — skipping")
