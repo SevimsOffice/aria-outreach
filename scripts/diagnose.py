@@ -108,25 +108,75 @@ check("Claude Haiku API", check_anthropic)
 
 # 5. Instantly.ai API
 print("\n── 5. Instantly.ai ──")
-def check_instantly():
+
+def check_instantly_api():
     import requests
     api_key = os.environ["INSTANTLY_API_KEY"]
-    campaign_id = os.environ["INSTANTLY_CAMPAIGN_ID"]
     resp = requests.get(
         "https://api.instantly.ai/api/v1/campaign/list",
-        params={"api_key": api_key, "limit": 5},
+        params={"api_key": api_key, "limit": 100},
         timeout=10,
     )
     resp.raise_for_status()
     data = resp.json()
     campaigns = data if isinstance(data, list) else data.get("data", [])
-    ids = [c.get("id", "") for c in campaigns]
-    if campaign_id in ids:
-        return f"Kampanya bulundu ✓ ({len(campaigns)} kampanya toplam)"
-    else:
-        return f"{WARN} API çalışıyor ama kampanya ID eşleşmedi. Mevcut ID'ler: {ids}"
+    return f"API bağlantısı başarılı — {len(campaigns)} kampanya bulundu"
 
-check("Instantly API + kampanya", check_instantly)
+check("Instantly API bağlantısı", check_instantly_api)
+
+def check_instantly_campaign():
+    import requests
+    api_key = os.environ["INSTANTLY_API_KEY"]
+    campaign_id = os.environ["INSTANTLY_CAMPAIGN_ID"]
+    STATUS_MAP = {0: "draft/taslak", 1: "✅ AKTİF", 2: "⛔ PASIF/DURAKLATILDI", 3: "stopped", 4: "tamamlandı"}
+    resp = requests.get(
+        "https://api.instantly.ai/api/v1/campaign/list",
+        params={"api_key": api_key, "limit": 100},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    campaigns = data if isinstance(data, list) else data.get("data", [])
+    for c in campaigns:
+        if c.get("id") == campaign_id:
+            raw = c.get("status", -1)
+            status_str = STATUS_MAP.get(raw, f"bilinmiyor({raw})")
+            name = c.get("name", "?")
+            if raw != 1:
+                raise ValueError(
+                    f"Kampanya '{name}' AKTIF DEĞİL — durum: {status_str}\n"
+                    "   → Instantly dashboard'una git → kampanyanı seç → Launch/Resume butonuna bas!"
+                )
+            return f"Kampanya '{name}' — durum: {status_str}"
+    raise ValueError(
+        f"Kampanya ID bulunamadı: {campaign_id}\n"
+        "   → GitHub Secrets'taki INSTANTLY_CAMPAIGN_ID'yi kontrol et.\n"
+        "   → Instantly'de kampanya URL'inden UUID'yi kopyala."
+    )
+
+check("Instantly kampanya durumu", check_instantly_campaign)
+
+def check_instantly_sending_accounts():
+    import requests
+    api_key = os.environ["INSTANTLY_API_KEY"]
+    resp = requests.get(
+        "https://api.instantly.ai/api/v1/account/list",
+        params={"api_key": api_key, "limit": 100},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    accounts = data if isinstance(data, list) else data.get("data", [])
+    if not accounts:
+        raise ValueError(
+            "Instantly'ye bağlı gönderici email hesabı YOK!\n"
+            "   → Instantly dashboard → Email Accounts → Gmail/Outlook bağla\n"
+            "   → Hesap eklendikten sonra kampanyaya ekle"
+        )
+    emails = [a.get("email", a.get("address", "?")) for a in accounts[:5]]
+    return f"{len(accounts)} gönderici hesap bağlı: {', '.join(emails)}"
+
+check("Instantly gönderici email hesapları", check_instantly_sending_accounts)
 
 # 6. Telegram
 print("\n── 6. Telegram Bot ──")

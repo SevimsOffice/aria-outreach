@@ -203,6 +203,52 @@ class InstantlyClient:
         except requests.RequestException:
             return 0
 
+    def get_campaign_status(self) -> dict:
+        """
+        Return the status of the configured campaign.
+        Possible status values: 'active', 'paused', 'draft', 'stopped', 'completed', 'not_found'
+        """
+        STATUS_MAP = {0: "draft", 1: "active", 2: "paused", 3: "stopped", 4: "completed"}
+        try:
+            resp = requests.get(
+                f"{INSTANTLY_V1}/campaign/list",
+                params=self._v1_params({"limit": 100}),
+                headers=self._headers_v1,
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            campaigns = data if isinstance(data, list) else data.get("data", [])
+            for c in campaigns:
+                if c.get("id") == self._campaign_id:
+                    raw = c.get("status", -1)
+                    return {
+                        "found": True,
+                        "name": c.get("name", ""),
+                        "status": STATUS_MAP.get(raw, f"unknown({raw})"),
+                        "raw_status": raw,
+                    }
+            return {"found": False, "status": "not_found"}
+        except requests.RequestException as e:
+            logger.error(f"Instantly campaign status error: {e}")
+            return {"found": False, "status": "error", "error": str(e)}
+
+    def list_sending_accounts(self) -> list[dict]:
+        """List email sending accounts connected to Instantly (needed for campaign to send)."""
+        try:
+            resp = requests.get(
+                f"{INSTANTLY_V1}/account/list",
+                params=self._v1_params({"limit": 100}),
+                headers=self._headers_v1,
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data if isinstance(data, list) else data.get("data", [])
+        except requests.RequestException as e:
+            logger.error(f"Instantly sending accounts error: {e}")
+            return []
+
 
 def _clean_reply_body(body: str) -> str:
     """Strip quoted/forwarded content so only the new reply text remains."""
