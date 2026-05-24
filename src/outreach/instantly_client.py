@@ -80,13 +80,16 @@ class InstantlyClient:
         }
 
         try:
+            logger.info(f"Instantly v2 POST /leads payload: {payload}")
+            print(f"[INSTANTLY] POST /leads payload: {payload}", flush=True)
             resp = requests.post(
                 f"{INSTANTLY_V2}/leads",
                 json=payload,
                 headers=self._headers_v2,
                 timeout=20,
             )
-            logger.info(f"Instantly v2 HTTP {resp.status_code} for {email}: {resp.text[:300]}")
+            print(f"[INSTANTLY] {resp.status_code} {email} | {resp.text}", flush=True)
+            logger.info(f"Instantly v2 HTTP {resp.status_code} for {email}: {resp.text}")
 
             if resp.status_code == 429:
                 logger.warning("Instantly rate limit — waiting 60s")
@@ -107,7 +110,7 @@ class InstantlyClient:
                 )
                 return None
             if resp.status_code == 400:
-                logger.error(f"Instantly 400 Bad Request for {email}: {resp.text[:500]}")
+                logger.error(f"Instantly 400 Bad Request for {email}: {resp.text}")
                 return None
             if resp.status_code == 422:
                 # Contact already exists — treat as success (idempotent)
@@ -136,6 +139,8 @@ class InstantlyClient:
                 headers=self._headers_v1,
                 timeout=15,
             )
+            print(f"[INSTANTLY] GET /analytics/campaign/summary {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly GET /analytics/campaign/summary {resp.status_code}: {resp.text}")
             resp.raise_for_status()
             return resp.json()
         except requests.RequestException as e:
@@ -163,6 +168,8 @@ class InstantlyClient:
                 headers=self._headers_v1,
                 timeout=20,
             )
+            print(f"[INSTANTLY] GET /unibox/emails {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly GET /unibox/emails {resp.status_code}: {resp.text}")
             resp.raise_for_status()
             data  = resp.json()
             emails = data.get("emails", data) if isinstance(data, dict) else data
@@ -198,10 +205,62 @@ class InstantlyClient:
                 headers=self._headers_v1,
                 timeout=15,
             )
+            print(f"[INSTANTLY] GET /lead/list {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly GET /lead/list {resp.status_code}: {resp.text}")
             resp.raise_for_status()
             return resp.json().get("total", 0)
         except requests.RequestException:
             return 0
+
+    def get_campaign_status(self) -> dict:
+        """
+        Return the status of the configured campaign.
+        Possible status values: 'active', 'paused', 'draft', 'stopped', 'completed', 'not_found'
+        """
+        STATUS_MAP = {0: "draft", 1: "active", 2: "paused", 3: "stopped", 4: "completed"}
+        try:
+            resp = requests.get(
+                f"{INSTANTLY_V1}/campaign/list",
+                params=self._v1_params({"limit": 100}),
+                headers=self._headers_v1,
+                timeout=15,
+            )
+            print(f"[INSTANTLY] GET /campaign/list {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly GET /campaign/list {resp.status_code}: {resp.text}")
+            resp.raise_for_status()
+            data = resp.json()
+            campaigns = data if isinstance(data, list) else data.get("data", [])
+            for c in campaigns:
+                if c.get("id") == self._campaign_id:
+                    raw = c.get("status", -1)
+                    return {
+                        "found": True,
+                        "name": c.get("name", ""),
+                        "status": STATUS_MAP.get(raw, f"unknown({raw})"),
+                        "raw_status": raw,
+                    }
+            return {"found": False, "status": "not_found"}
+        except requests.RequestException as e:
+            logger.error(f"Instantly campaign status error: {e}")
+            return {"found": False, "status": "error", "error": str(e)}
+
+    def list_sending_accounts(self) -> list[dict]:
+        """List email sending accounts connected to Instantly (needed for campaign to send)."""
+        try:
+            resp = requests.get(
+                f"{INSTANTLY_V1}/account/list",
+                params=self._v1_params({"limit": 100}),
+                headers=self._headers_v1,
+                timeout=15,
+            )
+            print(f"[INSTANTLY] GET /account/list {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly GET /account/list {resp.status_code}: {resp.text}")
+            resp.raise_for_status()
+            data = resp.json()
+            return data if isinstance(data, list) else data.get("data", [])
+        except requests.RequestException as e:
+            logger.error(f"Instantly sending accounts error: {e}")
+            return []
 
 
 def _clean_reply_body(body: str) -> str:

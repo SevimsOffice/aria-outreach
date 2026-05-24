@@ -71,7 +71,7 @@ class TelegramNotifier:
         msg = (
             f"{status} *ARIA Günlük Özet — {today}*\n\n"
             f"🔍 Yeni firma bulundu: *{new_prospects_found}*\n"
-            f"📤 E-posta gönderildi: *{emails_sent}*\n"
+            f"📤 Instantly kampanyasına eklendi: *{emails_sent}*\n"
             f"📬 Yeni yanıt: *{replies_today}*\n"
             f"🔥 Sıcak lead: *{hot_leads_today}*\n"
         )
