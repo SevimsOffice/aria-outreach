@@ -70,30 +70,29 @@ def run(dry_run: bool = False, limit: int = 50):
     telegram = TelegramNotifier(cfg.telegram_bot_token, cfg.telegram_chat_id)
 
     # --- Pre-flight: verify Instantly campaign is active ---
-    campaign_info = instantly.get_campaign_status()
-    if not campaign_info.get("found"):
-        msg = (
-            f"INSTANTLY KAMPANYA BULUNAMADI — ID: {cfg.instantly_campaign_id}\n"
-            "GitHub Secrets'taki INSTANTLY_CAMPAIGN_ID'yi kontrol et."
-        )
-        logger.error(msg)
-        errors.append(msg)
-        telegram.send_daily_summary(0, 0, 0, 0, errors)
-        return {"sent": 0, "new": 0, "errors": 1}
-
+    campaign_info   = instantly.get_campaign_status()
     campaign_status = campaign_info.get("status", "unknown")
     campaign_name   = campaign_info.get("name", "?")
-    if campaign_status != "active":
-        msg = (
-            f"INSTANTLY KAMPANYASI AKTİF DEĞİL — '{campaign_name}' durumu: {campaign_status}\n"
-            "Instantly dashboard'una git → kampanyanı seç → Launch/Resume butonuna bas!"
-        )
-        logger.error(msg)
-        errors.append(f"Kampanya pasif ({campaign_status}) — dashboard'dan başlat")
-        telegram.send_daily_summary(0, 0, 0, 0, errors)
-        return {"sent": 0, "new": 0, "errors": 1}
 
-    logger.info(f"Pre-flight OK: Instantly kampanya '{campaign_name}' aktif ✓")
+    if campaign_info.get("found"):
+        # Status is confirmed — only abort if explicitly paused/stopped/draft
+        if campaign_status in ("paused", "stopped", "draft"):
+            msg = (
+                f"INSTANTLY KAMPANYASI AKTİF DEĞİL — '{campaign_name}' durumu: {campaign_status}\n"
+                "Instantly dashboard'una git → kampanyanı seç → Launch/Resume butonuna bas!"
+            )
+            logger.error(msg)
+            errors.append(f"Kampanya pasif ({campaign_status}) — dashboard'dan başlat")
+            telegram.send_daily_summary(0, 0, 0, 0, errors)
+            return {"sent": 0, "new": 0, "errors": 1}
+        logger.info(f"Pre-flight OK: Instantly kampanya '{campaign_name}' durumu={campaign_status} ✓")
+    else:
+        # Could not confirm status (API list miss or v1/v2 both failed) — warn but continue.
+        # The add_contact call itself will surface any real auth/ID errors.
+        logger.warning(
+            f"Kampanya durumu doğrulanamadı (status={campaign_status}) — "
+            "pipeline devam ediyor, add_contact hataları varsa logda görünür."
+        )
 
     # --- Step 1: Scrape ---
     logger.info("Step 1: Scraping OSB websites...")
