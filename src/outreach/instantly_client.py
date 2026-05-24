@@ -80,13 +80,14 @@ class InstantlyClient:
         }
 
         try:
+            logger.info(f"Instantly v2 POST /leads payload: {payload}")
             resp = requests.post(
                 f"{INSTANTLY_V2}/leads",
                 json=payload,
                 headers=self._headers_v2,
                 timeout=20,
             )
-            logger.info(f"Instantly v2 HTTP {resp.status_code} for {email}: {resp.text[:300]}")
+            logger.info(f"Instantly v2 HTTP {resp.status_code} for {email}: {resp.text}")
 
             if resp.status_code == 429:
                 logger.warning("Instantly rate limit — waiting 60s")
@@ -107,7 +108,7 @@ class InstantlyClient:
                 )
                 return None
             if resp.status_code == 400:
-                logger.error(f"Instantly 400 Bad Request for {email}: {resp.text[:500]}")
+                logger.error(f"Instantly 400 Bad Request for {email}: {resp.text}")
                 return None
             if resp.status_code == 422:
                 # Contact already exists — treat as success (idempotent)
