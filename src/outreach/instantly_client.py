@@ -215,9 +215,36 @@ class InstantlyClient:
     def get_campaign_status(self) -> dict:
         """
         Return the status of the configured campaign.
-        Possible status values: 'active', 'paused', 'draft', 'stopped', 'completed', 'not_found'
+        Tries v2 API first (direct lookup by ID), falls back to v1 list scan.
+        Possible status values: 'active', 'paused', 'draft', 'stopped', 'completed', 'not_found', 'unknown'
         """
         STATUS_MAP = {0: "draft", 1: "active", 2: "paused", 3: "stopped", 4: "completed"}
+
+        # --- Attempt 1: v2 direct lookup by campaign ID ---
+        try:
+            resp = requests.get(
+                f"{INSTANTLY_V2}/campaigns/{self._campaign_id}",
+                headers=self._headers_v2,
+                timeout=15,
+            )
+            print(f"[INSTANTLY] GET /v2/campaigns/{self._campaign_id} {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly GET /v2/campaigns/{self._campaign_id} {resp.status_code}: {resp.text}")
+            if resp.status_code == 200:
+                data = resp.json()
+                raw = data.get("status", -1)
+                return {
+                    "found": True,
+                    "name": data.get("name", ""),
+                    "status": STATUS_MAP.get(raw, f"unknown({raw})"),
+                    "raw_status": raw,
+                }
+            if resp.status_code == 404:
+                logger.warning("v2 direct lookup returned 404 — campaign ID may be wrong")
+                return {"found": False, "status": "not_found"}
+        except requests.RequestException as e:
+            logger.warning(f"v2 campaign lookup failed, falling back to v1 list: {e}")
+
+        # --- Attempt 2: v1 list scan (fallback) ---
         try:
             resp = requests.get(
                 f"{INSTANTLY_V1}/campaign/list",
@@ -225,8 +252,8 @@ class InstantlyClient:
                 headers=self._headers_v1,
                 timeout=15,
             )
-            print(f"[INSTANTLY] GET /campaign/list {resp.status_code} | {resp.text}", flush=True)
-            logger.info(f"Instantly GET /campaign/list {resp.status_code}: {resp.text}")
+            print(f"[INSTANTLY] GET /v1/campaign/list {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly GET /v1/campaign/list {resp.status_code}: {resp.text}")
             resp.raise_for_status()
             data = resp.json()
             campaigns = data if isinstance(data, list) else data.get("data", [])
@@ -239,9 +266,11 @@ class InstantlyClient:
                         "status": STATUS_MAP.get(raw, f"unknown({raw})"),
                         "raw_status": raw,
                     }
-            return {"found": False, "status": "not_found"}
+            # List returned OK but campaign not in it — treat as unknown, not hard not_found
+            logger.warning(f"Campaign {self._campaign_id} not found in v1 list ({len(campaigns)} campaigns returned)")
+            return {"found": False, "status": "list_miss"}
         except requests.RequestException as e:
-            logger.error(f"Instantly campaign status error: {e}")
+            logger.error(f"Instantly campaign status error (both v1+v2 failed): {e}")
             return {"found": False, "status": "error", "error": str(e)}
 
     def list_sending_accounts(self) -> list[dict]:
