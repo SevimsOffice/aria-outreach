@@ -140,6 +140,7 @@ class InstantlyClient:
                 timeout=15,
             )
             print(f"[INSTANTLY] GET /analytics/campaign/summary {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly GET /analytics/campaign/summary {resp.status_code}: {resp.text}")
             resp.raise_for_status()
             return resp.json()
         except requests.RequestException as e:
@@ -168,6 +169,7 @@ class InstantlyClient:
                 timeout=20,
             )
             print(f"[INSTANTLY] GET /unibox/emails {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly GET /unibox/emails {resp.status_code}: {resp.text}")
             resp.raise_for_status()
             data  = resp.json()
             emails = data.get("emails", data) if isinstance(data, dict) else data
@@ -204,6 +206,7 @@ class InstantlyClient:
                 timeout=15,
             )
             print(f"[INSTANTLY] GET /lead/list {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly GET /lead/list {resp.status_code}: {resp.text}")
             resp.raise_for_status()
             return resp.json().get("total", 0)
         except requests.RequestException:
@@ -223,6 +226,7 @@ class InstantlyClient:
                 timeout=15,
             )
             print(f"[INSTANTLY] GET /campaign/list {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly GET /campaign/list {resp.status_code}: {resp.text}")
             resp.raise_for_status()
             data = resp.json()
             campaigns = data if isinstance(data, list) else data.get("data", [])
@@ -250,6 +254,7 @@ class InstantlyClient:
                 timeout=15,
             )
             print(f"[INSTANTLY] GET /account/list {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly GET /account/list {resp.status_code}: {resp.text}")
             resp.raise_for_status()
             data = resp.json()
             return data if isinstance(data, list) else data.get("data", [])
