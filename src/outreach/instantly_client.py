@@ -81,12 +81,14 @@ class InstantlyClient:
 
         try:
             logger.info(f"Instantly v2 POST /leads payload: {payload}")
+            print(f"[INSTANTLY] POST /leads payload: {payload}", flush=True)
             resp = requests.post(
                 f"{INSTANTLY_V2}/leads",
                 json=payload,
                 headers=self._headers_v2,
                 timeout=20,
             )
+            print(f"[INSTANTLY] {resp.status_code} {email} | {resp.text}", flush=True)
             logger.info(f"Instantly v2 HTTP {resp.status_code} for {email}: {resp.text}")
 
             if resp.status_code == 429:
@@ -137,6 +139,7 @@ class InstantlyClient:
                 headers=self._headers_v1,
                 timeout=15,
             )
+            print(f"[INSTANTLY] GET /analytics/campaign/summary {resp.status_code} | {resp.text}", flush=True)
             resp.raise_for_status()
             return resp.json()
         except requests.RequestException as e:
@@ -164,6 +167,7 @@ class InstantlyClient:
                 headers=self._headers_v1,
                 timeout=20,
             )
+            print(f"[INSTANTLY] GET /unibox/emails {resp.status_code} | {resp.text}", flush=True)
             resp.raise_for_status()
             data  = resp.json()
             emails = data.get("emails", data) if isinstance(data, dict) else data
@@ -199,6 +203,7 @@ class InstantlyClient:
                 headers=self._headers_v1,
                 timeout=15,
             )
+            print(f"[INSTANTLY] GET /lead/list {resp.status_code} | {resp.text}", flush=True)
             resp.raise_for_status()
             return resp.json().get("total", 0)
         except requests.RequestException:
@@ -217,6 +222,7 @@ class InstantlyClient:
                 headers=self._headers_v1,
                 timeout=15,
             )
+            print(f"[INSTANTLY] GET /campaign/list {resp.status_code} | {resp.text}", flush=True)
             resp.raise_for_status()
             data = resp.json()
             campaigns = data if isinstance(data, list) else data.get("data", [])
@@ -243,6 +249,7 @@ class InstantlyClient:
                 headers=self._headers_v1,
                 timeout=15,
             )
+            print(f"[INSTANTLY] GET /account/list {resp.status_code} | {resp.text}", flush=True)
             resp.raise_for_status()
             data = resp.json()
             return data if isinstance(data, list) else data.get("data", [])
