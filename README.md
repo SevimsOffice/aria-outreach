@@ -1,6 +1,10 @@
 # ARIA — Automated Revenue Intelligence Agent
 ### Built for Sevim Durmuş / aiandtech.cloud
 
+MEET ARIA
+<img width="1080" height="1456" alt="Aria Sales Agent AIANDTECH TURKEY" src="https://github.com/user-attachments/assets/ff5f8b64-fcfb-4019-a0e3-25f24aa3fb34" />
+
+
 ARIA runs every morning at 7 AM Turkey time, finds new Bursa OSB companies,
 researches them, writes personalized Turkish outreach emails, and adds them
 to your Instantly.ai campaign — automatically. You only get a Telegram
