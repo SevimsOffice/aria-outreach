@@ -129,29 +129,70 @@ def check_instantly_campaign():
     api_key = os.environ["INSTANTLY_API_KEY"]
     campaign_id = os.environ["INSTANTLY_CAMPAIGN_ID"]
     STATUS_MAP = {0: "draft/taslak", 1: "✅ AKTİF", 2: "⛔ PASIF/DURAKLATILDI", 3: "stopped", 4: "tamamlandı"}
-    resp = requests.get(
-        "https://api.instantly.ai/api/v1/campaign/list",
-        params={"api_key": api_key, "limit": 100},
-        timeout=10,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    campaigns = data if isinstance(data, list) else data.get("data", [])
-    for c in campaigns:
-        if c.get("id") == campaign_id:
-            raw = c.get("status", -1)
+
+    # Attempt 1: v2 direct lookup by ID (faster, unambiguous)
+    v2_status = None
+    try:
+        r2 = requests.get(
+            f"https://api.instantly.ai/api/v2/campaigns/{campaign_id}",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=10,
+        )
+        v2_status = r2.status_code
+        print(f"  v2 direkt lookup → HTTP {r2.status_code}: {r2.text[:200]}")
+        if r2.status_code == 200:
+            data = r2.json()
+            raw = data.get("status", -1)
+            name = data.get("name", "?")
             status_str = STATUS_MAP.get(raw, f"bilinmiyor({raw})")
-            name = c.get("name", "?")
             if raw != 1:
                 raise ValueError(
                     f"Kampanya '{name}' AKTIF DEĞİL — durum: {status_str}\n"
                     "   → Instantly dashboard'una git → kampanyanı seç → Launch/Resume butonuna bas!"
                 )
-            return f"Kampanya '{name}' — durum: {status_str}"
+            return f"v2 ile bulundu ✓  '{name}' — durum: {status_str}"
+    except ValueError:
+        raise
+    except Exception as e:
+        print(f"  v2 lookup başarısız: {e}")
+
+    # Attempt 2: v1 list scan — shows EVERY accessible campaign so user can compare IDs
+    r1 = requests.get(
+        "https://api.instantly.ai/api/v1/campaign/list",
+        params={"api_key": api_key, "limit": 100},
+        timeout=10,
+    )
+    r1.raise_for_status()
+    data = r1.json()
+    campaigns = data if isinstance(data, list) else data.get("data", [])
+    print(f"  v1 list → bu API key ile görünen {len(campaigns)} kampanya:")
+    for c in campaigns:
+        cid = c.get("id", "")
+        marker = "  ← EŞLEŞİYOR ✓" if cid == campaign_id else ""
+        print(f"    {cid}  '{c.get('name', '?')}'{marker}")
+        if cid == campaign_id:
+            raw = c.get("status", -1)
+            status_str = STATUS_MAP.get(raw, f"bilinmiyor({raw})")
+            if raw != 1:
+                raise ValueError(
+                    f"Kampanya '{c.get('name','?')}' AKTIF DEĞİL — durum: {status_str}\n"
+                    "   → Instantly dashboard'una git → kampanyanı seç → Launch/Resume butonuna bas!"
+                )
+            return f"v1 ile bulundu ✓  '{c.get('name','?')}' — durum: {status_str}"
+
     raise ValueError(
-        f"Kampanya ID bulunamadı: {campaign_id}\n"
-        "   → GitHub Secrets'taki INSTANTLY_CAMPAIGN_ID'yi kontrol et.\n"
-        "   → Instantly'de kampanya URL'inden UUID'yi kopyala."
+        f"Kampanya bulunamadı! (v2 HTTP {v2_status}, v1 listesinde de yok)\n"
+        f"   → Aranan ID   : {campaign_id}\n"
+        f"   → Bu API key ile {len(campaigns)} kampanya görünüyor (tam liste yukarıda)\n"
+        "   ─────────────────────────────────────────────────────\n"
+        "   Büyük ihtimalle API KEY WORKSPACE UYUMSUZLUĞU var:\n"
+        "   → Instantly'de sağ üst köşedeki workspace adını kontrol et\n"
+        "   → Settings → Integrations → API → bu workspace'e ait key'i kopyala\n"
+        "   → GitHub → Settings → Secrets → INSTANTLY_API_KEY'i güncelle\n"
+        "   ─────────────────────────────────────────────────────\n"
+        "   Kampanya ID'si yanlışsa:\n"
+        "   → Instantly'de kampanyana gir → URL'deki UUID'yi kopyala\n"
+        "   → GitHub → Settings → Secrets → INSTANTLY_CAMPAIGN_ID'yi güncelle"
     )
 
 check("Instantly kampanya durumu", check_instantly_campaign)
