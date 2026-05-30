@@ -165,18 +165,24 @@ def run(dry_run: bool = False, limit: int = 50):
                 "title":      "",
                 "source":     f"{osb.lower()}_direct",
             }
-        elif domain:
-            # Fallback: Apollo → Hunter → pattern guesser
-            if apollo:
-                contact = apollo.find_contact_by_domain(domain, name)
-            if not contact and hunter:
-                contact = hunter.find_email_by_domain(domain)
+        else:
+            # If no domain, derive one from the company name before trying APIs
+            if not domain:
+                from src.enrichment.email_guesser import guess_domain_from_company_name
+                derived = guess_domain_from_company_name(name)
+                if derived:
+                    domain = derived
+                    company["Domain"] = domain
+                    logger.info(f"  Derived domain '{domain}' from company name")
+
+            # Apollo → Hunter → pattern guesser
+            if domain:
+                if apollo:
+                    contact = apollo.find_contact_by_domain(domain, name)
+                if not contact and hunter:
+                    contact = hunter.find_email_by_domain(domain)
             if not contact:
                 contact = best_guess(domain=domain, company_name=name)
-        else:
-            # No domain and no OSB email (e.g. DOSAB Excel companies) —
-            # derive a domain from the company name and generate a pattern guess
-            contact = best_guess(domain="", company_name=name)
 
         if not contact or not contact.get("email"):
             logger.info(f"  No email found for {name} — skipping")
