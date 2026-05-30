@@ -1,11 +1,12 @@
 """
-KAYAPA OSB scraper — kayapaosb.org.tr
+Istanbul OSB scrapers — covers the four largest organized industrial zones:
+  - İkitelli OSB  (iosb.org.tr)
+  - Tuzla OSB     (tuzlaosb.org.tr)
+  - Hadımköy OSB  (hadimkoyosb.org.tr)
+  - Dudullu OSB   (dudulluosb.org.tr)
 
-NOTE: As of 2025-2026, the KAYAPA OSB website has been frequently unavailable
-(504 Gateway Timeout / 404). This scraper tries multiple URL patterns and
-returns an empty list gracefully if the site is down.
-
-If the site is up, it looks for company listings in table or card layout.
+Each sub-scraper tries multiple URL patterns and returns an empty list
+gracefully if the site is unreachable.
 """
 
 import logging
@@ -13,61 +14,73 @@ import re
 
 from .base_scraper import (
     get_session, fetch_page, extract_domain,
-    normalize_phone, clean_company_name
+    normalize_phone, clean_company_name,
 )
 
 logger = logging.getLogger(__name__)
 
-OSB_NAME = "KAYAPA"
+CITY = "İstanbul"
 
-# Try these base URLs in order
-CANDIDATE_BASES = [
-    "https://www.kayapaosb.org.tr",
-    "https://kayapaosb.org.tr",
-    "https://www.kayapa.org.tr",
+# (osb_name, candidate_bases, candidate_paths)
+_OSB_CONFIGS = [
+    (
+        "IKİTELLİ",
+        ["https://www.iosb.org.tr", "https://iosb.org.tr"],
+        ["/firmalar", "/uyeler", "/uye-firmalar", "/firmalarimiz", "/uyelerimiz"],
+    ),
+    (
+        "TUZLA",
+        ["https://www.tuzlaosb.org.tr", "https://tuzlaosb.org.tr"],
+        ["/firmalar", "/uyeler", "/uye-firmalar", "/firmalarimiz", "/uyelerimiz"],
+    ),
+    (
+        "HADIMKÖY",
+        ["https://www.hadimkoyosb.org.tr", "https://hadimkoyosb.org.tr"],
+        ["/firmalar", "/uyeler", "/uye-firmalar", "/firmalarimiz", "/uyelerimiz"],
+    ),
+    (
+        "DUDULLU",
+        ["https://www.dudulluosb.org.tr", "https://dudulluosb.org.tr"],
+        ["/firmalar", "/uyeler", "/uye-firmalar", "/firmalarimiz", "/uyelerimiz"],
+    ),
 ]
 
-# Try these paths per base URL
-CANDIDATE_PATHS = [
-    "/firmalar",
-    "/uyeler",
-    "/uye-firmalar",
-    "/firmalarimiz",
-    "/uyelerimiz",
-    "/katilimci-firmalar",
-]
 
-
-def scrape_kayapa() -> list[dict]:
-    """
-    Attempt to scrape KAYAPA OSB member companies.
-    Returns empty list (without raising) if site is unreachable.
-    """
+def scrape_istanbul() -> list[dict]:
+    """Scrape all Istanbul OSBs and return combined list."""
     session = get_session()
+    all_companies: list[dict] = []
+    for osb_name, bases, paths in _OSB_CONFIGS:
+        companies = _scrape_one_osb(session, osb_name, bases, paths)
+        all_companies.extend(companies)
+    logger.info(f"İstanbul toplam: {len(all_companies)} firma")
+    return all_companies
+
+
+def _scrape_one_osb(session, osb_name: str, bases: list[str], paths: list[str]) -> list[dict]:
     soup = None
     working_base = None
 
-    # Try each base + path combination
-    for base in CANDIDATE_BASES:
-        for path in CANDIDATE_PATHS:
+    for base in bases:
+        for path in paths:
             url = base + path
             soup = fetch_page(url, session)
             if soup and len(soup.get_text(strip=True)) > 500:
                 working_base = base
-                logger.info(f"KAYAPA: found working URL: {url}")
+                logger.info(f"{osb_name}: çalışan URL bulundu: {url}")
                 break
         if soup:
             break
 
     if not soup:
-        logger.warning("KAYAPA: site unreachable — skipping (will retry tomorrow)")
+        logger.warning(f"{osb_name}: site ulaşılamıyor — atlanıyor")
         return []
 
-    companies = _parse_table_layout(soup, working_base)
+    companies = _parse_table_layout(soup, osb_name, working_base)
     if not companies:
-        companies = _parse_card_layout(soup)
+        companies = _parse_card_layout(soup, osb_name)
 
-    # Handle pagination
+    # Pagination
     for a in soup.find_all("a", href=True):
         text = a.get_text(strip=True)
         href = a["href"]
@@ -75,10 +88,10 @@ def scrape_kayapa() -> list[dict]:
             next_url = href if href.startswith("http") else (working_base or "") + href
             next_soup = fetch_page(next_url, session)
             if next_soup:
-                companies.extend(_parse_table_layout(next_soup, working_base))
-                companies.extend(_parse_card_layout(next_soup))
+                companies.extend(_parse_table_layout(next_soup, osb_name, working_base))
+                companies.extend(_parse_card_layout(next_soup, osb_name))
 
-    # Dedup by name
+    # Dedup by name within this OSB
     seen: set[str] = set()
     unique = []
     for c in companies:
@@ -87,15 +100,15 @@ def scrape_kayapa() -> list[dict]:
             seen.add(key)
             unique.append(c)
 
-    logger.info(f"KAYAPA: scraped {len(unique)} companies")
+    logger.info(f"{osb_name}: {len(unique)} firma")
     return unique
 
 
-def _parse_table_layout(soup, base_url: str = "") -> list[dict]:
+def _parse_table_layout(soup, osb_name: str, base_url: str = "") -> list[dict]:
     companies = []
     for table in soup.find_all("table"):
         rows = table.find_all("tr")
-        for row in rows[1:]:    # Skip header
+        for row in rows[1:]:
             cols = row.find_all(["td", "th"])
             if len(cols) < 2:
                 continue
@@ -112,11 +125,11 @@ def _parse_table_layout(soup, base_url: str = "") -> list[dict]:
                 text = col.get_text()
                 if re.search(r"0\d{10}", re.sub(r"\s", "", text)):
                     phone = normalize_phone(text)
-            companies.append(_make_record(name, "", extract_domain(website), phone, ""))
+            companies.append(_make_record(name, "", extract_domain(website), phone, osb_name))
     return companies
 
 
-def _parse_card_layout(soup) -> list[dict]:
+def _parse_card_layout(soup, osb_name: str) -> list[dict]:
     companies = []
     containers = soup.find_all(
         ["div", "li", "article"],
@@ -143,18 +156,18 @@ def _parse_card_layout(soup) -> list[dict]:
         text = div.get_text()
         phone_m = re.search(r"0\s*\d{3}[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}", text)
         phone = normalize_phone(phone_m.group() if phone_m else "")
-        companies.append(_make_record(name, "", extract_domain(website), phone, ""))
+        companies.append(_make_record(name, "", extract_domain(website), phone, osb_name))
     return companies
 
 
-def _make_record(name, sector, domain, phone, address) -> dict:
+def _make_record(name: str, sector: str, domain: str, phone: str, osb_name: str) -> dict:
     return {
         "Company_Name": name,
         "Sector":       sector,
         "Domain":       domain,
         "Phone":        phone,
-        "Address":      address,
+        "Address":      "",
         "Email":        "",
-        "OSB":          OSB_NAME,
-        "City":         "Bursa",
+        "OSB":          osb_name,
+        "City":         CITY,
     }

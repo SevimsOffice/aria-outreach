@@ -34,6 +34,8 @@ from src.database.sheets_client import SheetsClient
 from src.scraper.nosab_scraper import scrape_nosab, scrape_nosab_detail
 from src.scraper.dosab_scraper import scrape_dosab
 from src.scraper.kayapa_scraper import scrape_kayapa
+from src.scraper.istanbul_scraper import scrape_istanbul
+from src.scraper.izmir_scraper import scrape_izmir
 from src.scraper.base_scraper import get_session
 from src.scraper.deduplicator import merge_sources, deduplicate, validate_and_clean
 from src.enrichment.apollo_client import ApolloClient
@@ -100,7 +102,9 @@ def run(dry_run: bool = False, limit: int = 50):
         nosab = scrape_nosab()
         dosab = scrape_dosab()
         kayapa = scrape_kayapa()
-        all_scraped = merge_sources([nosab, dosab, kayapa])
+        istanbul = scrape_istanbul()
+        izmir = scrape_izmir()
+        all_scraped = merge_sources([nosab, dosab, kayapa, istanbul, izmir])
         logger.info(f"Scraped total: {len(all_scraped)} companies")
     except Exception as e:
         logger.error(f"Scraping failed: {e}")
@@ -133,6 +137,7 @@ def run(dry_run: bool = False, limit: int = 50):
         domain  = company.get("Domain", "")
         sector  = company.get("Sector", "")
         osb     = company.get("OSB", "")
+        city    = company.get("City", "Bursa")
 
         logger.info(f"Processing [{i+1}/{len(fresh)}]: {name}")
 
@@ -208,6 +213,7 @@ def run(dry_run: bool = False, limit: int = 50):
             company_name=name,
             sector=sector,
             osb=osb,
+            city=city,
             main_activity=research["main_activity"],
             pain_points=research["likely_pain_points"],
             contact_name=f"{first_name} {last_name}".strip(),

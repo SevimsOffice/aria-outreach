@@ -81,6 +81,7 @@ def scrape_nosab() -> list[dict]:
                 "Address":    "",
                 "Email":      "",
                 "OSB":        OSB_NAME,
+                "City":       "Bursa",
                 "detail_url": detail_url,
             })
 

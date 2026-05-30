@@ -163,6 +163,7 @@ def _parse_excel(content: bytes) -> list[dict]:
             "Address":      "",
             "Email":        "",
             "OSB":          OSB_NAME,
+            "City":         "Bursa",
         }
 
         for col_idx, field in col_map.items():

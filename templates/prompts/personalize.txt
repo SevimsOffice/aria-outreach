@@ -4,6 +4,7 @@ Firma Bilgileri:
 - Firma adı: {company_name}
 - Sektör: {sector}
 - OSB: {osb}
+- Şehir: {city}
 - Ana faaliyet: {main_activity}
 - Olası operasyonel sorunlar: {pain_points}
 
@@ -17,5 +18,5 @@ Kurallar (bunları kesinlikle uygula):
 7. Maksimum 25 kelime
 8. Tırnak işareti veya başka karakter ekleme — sadece cümleyi yaz
 
-İyi örnek: "DOSAB'daki dokuma üretiminde ihracat siparişlerinin yönetiminin ne kadar emek yoğun olduğunu, sektördeki başka firmalarla çalışırken bizzat gördüm."
+İyi örnek: "{city}'deki dokuma üretiminde ihracat siparişlerinin yönetiminin ne kadar emek yoğun olduğunu, sektördeki başka firmalarla çalışırken bizzat gördüm."
 Kötü örnek: "Firmanızın yapay zeka ile nasıl dönüşebileceğini görmek istedim."

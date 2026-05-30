@@ -27,6 +27,7 @@ class EmailComposer:
         main_activity: str,
         pain_points: str,
         contact_name: str = "",
+        city: str = "",
     ) -> dict:
         """
         Returns dict with:
@@ -35,7 +36,7 @@ class EmailComposer:
           personalized_line: str
         """
         personalized_line = self._generate_personalized_line(
-            company_name, sector, osb, main_activity, pain_points
+            company_name, sector, osb, main_activity, pain_points, city
         )
         salutation = _make_salutation(contact_name)
         body = self._initial_template.format(
@@ -68,12 +69,14 @@ class EmailComposer:
         return {"subject": f"Son bir düşünce — {company_name}", "body": body}
 
     def _generate_personalized_line(
-        self, company_name: str, sector: str, osb: str, main_activity: str, pain_points: str
+        self, company_name: str, sector: str, osb: str, main_activity: str, pain_points: str,
+        city: str = "",
     ) -> str:
         prompt = self._personalize_prompt.format(
             company_name=company_name,
             sector=sector,
             osb=osb,
+            city=city or osb,
             main_activity=main_activity,
             pain_points=pain_points,
         )
@@ -114,7 +117,7 @@ def _get_sector_example(sector: str) -> str:
     for key, example in examples.items():
         if key in sector_lower:
             return example
-    return "benzer sektörde faaliyet gösteren bir Bursa firması"
+    return "benzer sektörde faaliyet gösteren bir OSB firması"
 
 
 def _fallback_personalized_line(company_name: str, sector: str, osb: str) -> str:
@@ -145,6 +148,7 @@ _DEFAULT_PERSONALIZE_PROMPT = """Türk bir şirkete satış e-postası için tek
 Firma: {company_name}
 Sektör: {sector}
 OSB: {osb}
+Şehir: {city}
 Ana Faaliyet: {main_activity}
 Olası Sorunlar: {pain_points}
 
