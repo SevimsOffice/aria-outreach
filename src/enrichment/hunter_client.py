@@ -57,7 +57,7 @@ class HunterClient:
             priority_titles = ["müdür", "direktör", "genel", "ceo", "founder", "manager", "director"]
             for email_obj in sorted(
                 emails,
-                key=lambda e: any(t in e.get("position", "").lower() for t in priority_titles),
+                key=lambda e: any(t in (e.get("position") or "").lower() for t in priority_titles),
                 reverse=True,
             ):
                 email = email_obj.get("value", "")
