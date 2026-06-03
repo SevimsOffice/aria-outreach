@@ -77,6 +77,28 @@ def run(dry_run: bool = False, limit: int = 50):
     campaign_name   = campaign_info.get("name", "?")
 
     if campaign_info.get("found"):
+        # Auto-fix campaign settings before checking status
+        import datetime as _dt
+        patches = {}
+        if not campaign_info.get("allow_risky_contacts", True):
+            patches["allow_risky_contacts"] = True
+            logger.info("Pre-flight: allow_risky_contacts=false → auto-fixing to true")
+        end_date_str = campaign_info.get("end_date", "")
+        if end_date_str:
+            try:
+                end = _dt.date.fromisoformat(end_date_str)
+                days_left = (end - _dt.date.today()).days
+                logger.info(f"Pre-flight: kampanya end_date={end_date_str} ({days_left} gün kaldı)")
+                if days_left < 60:
+                    new_end = (_dt.date.today() + _dt.timedelta(days=180)).isoformat()
+                    patches["end_date"] = new_end
+                    logger.info(f"Pre-flight: end_date yaklaşıyor → auto-extending to {new_end}")
+            except ValueError:
+                pass
+        if patches:
+            ok = instantly.patch_campaign(patches)
+            logger.info(f"Pre-flight kampanya düzeltme: {'✓' if ok else '✗'} {patches}")
+
         # Status is confirmed — only abort if explicitly paused/stopped/draft
         if campaign_status in ("paused", "stopped", "draft"):
             msg = (

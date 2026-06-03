@@ -233,10 +233,13 @@ class InstantlyClient:
                 data = resp.json()
                 raw = data.get("status", -1)
                 return {
-                    "found": True,
-                    "name": data.get("name", ""),
-                    "status": STATUS_MAP.get(raw, f"unknown({raw})"),
-                    "raw_status": raw,
+                    "found":                True,
+                    "name":                 data.get("name", ""),
+                    "status":               STATUS_MAP.get(raw, f"unknown({raw})"),
+                    "raw_status":           raw,
+                    "allow_risky_contacts": data.get("allow_risky_contacts", True),
+                    "end_date":             data.get("end_date", ""),
+                    "daily_limit":          data.get("daily_limit", 0),
                 }
             if resp.status_code == 404:
                 logger.warning("v2 direct lookup returned 404 — campaign ID may be wrong")
@@ -272,6 +275,23 @@ class InstantlyClient:
         except requests.RequestException as e:
             logger.error(f"Instantly campaign status error (both v1+v2 failed): {e}")
             return {"found": False, "status": "error", "error": str(e)}
+
+    def patch_campaign(self, fields: dict) -> bool:
+        """Update campaign settings via PATCH /api/v2/campaigns/{id}."""
+        try:
+            resp = requests.patch(
+                f"{INSTANTLY_V2}/campaigns/{self._campaign_id}",
+                json=fields,
+                headers=self._headers_v2,
+                timeout=15,
+            )
+            print(f"[INSTANTLY] PATCH /v2/campaigns/{self._campaign_id} {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly PATCH /v2/campaigns {resp.status_code}: {resp.text}")
+            resp.raise_for_status()
+            return True
+        except requests.RequestException as e:
+            logger.warning(f"Instantly campaign PATCH failed: {e}")
+            return False
 
     def list_sending_accounts(self) -> list[dict]:
         """List email sending accounts connected to Instantly (needed for campaign to send)."""
