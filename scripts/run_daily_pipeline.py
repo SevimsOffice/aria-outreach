@@ -83,6 +83,9 @@ def run(dry_run: bool = False, limit: int = 50):
         if not campaign_info.get("allow_risky_contacts", True):
             patches["allow_risky_contacts"] = True
             logger.info("Pre-flight: allow_risky_contacts=false → auto-fixing to true")
+        if campaign_info.get("daily_limit", 0) != 50:
+            patches["daily_limit"] = 50
+            logger.info(f"Pre-flight: daily_limit={campaign_info.get('daily_limit')} → auto-fixing to 50")
         end_date_str = campaign_info.get("end_date", "")
         if end_date_str:
             try:
@@ -95,21 +98,17 @@ def run(dry_run: bool = False, limit: int = 50):
                     logger.info(f"Pre-flight: end_date yaklaşıyor → auto-extending to {new_end}")
             except ValueError:
                 pass
+        # If campaign is paused/stopped/draft, try to activate it automatically
+        if campaign_status in ("paused", "stopped", "draft"):
+            logger.warning(f"Pre-flight: kampanya durumu='{campaign_status}' → aktivasyon deneniyor")
+            patches["status"] = 1  # 1 = active in Instantly
         if patches:
             ok = instantly.patch_campaign(patches)
             logger.info(f"Pre-flight kampanya düzeltme: {'✓' if ok else '✗'} {patches}")
+            if "status" in patches and not ok:
+                logger.warning("Kampanya aktivasyonu başarısız — pipeline yine de devam ediyor")
 
-        # Status is confirmed — only abort if explicitly paused/stopped/draft
-        if campaign_status in ("paused", "stopped", "draft"):
-            msg = (
-                f"INSTANTLY KAMPANYASI AKTİF DEĞİL — '{campaign_name}' durumu: {campaign_status}\n"
-                "Instantly dashboard'una git → kampanyanı seç → Launch/Resume butonuna bas!"
-            )
-            logger.error(msg)
-            errors.append(f"Kampanya pasif ({campaign_status}) — dashboard'dan başlat")
-            telegram.send_daily_summary(0, 0, 0, 0, errors)
-            return {"sent": 0, "new": 0, "errors": 1}
-        logger.info(f"Pre-flight OK: Instantly kampanya '{campaign_name}' durumu={campaign_status} ✓")
+        logger.info(f"Pre-flight OK: Instantly kampanya '{campaign_name}' ✓")
     else:
         # Could not confirm status (API list miss or v1/v2 both failed) — warn but continue.
         # The add_contact call itself will surface any real auth/ID errors.

@@ -1,8 +1,10 @@
 """
 One-shot script — immediately fixes Instantly campaign settings:
   1. Enables allow_risky_contacts (so guessed emails are accepted, not silently dropped)
-  2. Extends end_date by 180 days if campaign ends within 60 days
-  3. Prints a full status report
+  2. Sets daily_limit to 50
+  3. Extends end_date by 180 days if campaign ends within 60 days
+  4. Activates campaign if it is paused/stopped/draft
+  5. Prints a full status report
 
 Run via GitHub Actions:
   Actions → "Fix Instantly Campaign" → Run workflow
@@ -62,7 +64,14 @@ def fix_campaign():
     else:
         print("\n✅ allow_risky_contacts zaten OK")
 
-    # Fix 2: end_date
+    # Fix 2: daily_limit
+    if daily_limit != 50:
+        patches["daily_limit"] = 50
+        print(f"\n⚠️  daily_limit={daily_limit} → 50'ye çekiliyor")
+    else:
+        print("\n✅ daily_limit zaten 50")
+
+    # Fix 3: end_date
     if end_date_str:
         try:
             end = date.fromisoformat(end_date_str)
@@ -78,6 +87,13 @@ def fix_campaign():
             print(f"\n⚠️  end_date parse edilemedi: {end_date_str}")
     else:
         print("\nℹ️  end_date belirtilmemiş (süresiz)")
+
+    # Fix 4: activate if paused/stopped/draft
+    if status in ("paused", "stopped", "draft"):
+        patches["status"] = 1
+        print(f"\n⚠️  Kampanya durumu='{status}' → aktivasyon uygulanıyor (status=1)")
+    else:
+        print(f"\n✅ Kampanya durumu OK ({status})")
 
     # Apply patches
     if patches:
