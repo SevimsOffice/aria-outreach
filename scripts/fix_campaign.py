@@ -1,7 +1,7 @@
 """
 One-shot script — immediately fixes Instantly campaign settings:
   1. Enables allow_risky_contacts (so guessed emails are accepted, not silently dropped)
-  2. Sets daily_limit to 50
+  2. Sets daily_limit to 100
   3. Extends end_date by 180 days if campaign ends within 60 days
   4. Activates campaign if it is paused/stopped/draft
   5. Prints a full status report
@@ -65,11 +65,11 @@ def fix_campaign():
         print("\n✅ allow_risky_contacts zaten OK")
 
     # Fix 2: daily_limit
-    if daily_limit != 50:
-        patches["daily_limit"] = 50
-        print(f"\n⚠️  daily_limit={daily_limit} → 50'ye çekiliyor")
+    if daily_limit != 100:
+        patches["daily_limit"] = 100
+        print(f"\n⚠️  daily_limit={daily_limit} → 100'ye çekiliyor")
     else:
-        print("\n✅ daily_limit zaten 50")
+        print("\n✅ daily_limit zaten 100")
 
     # Fix 3: end_date
     if end_date_str:

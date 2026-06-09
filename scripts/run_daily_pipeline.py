@@ -54,7 +54,7 @@ logging.basicConfig(
 logger = logging.getLogger("aria.daily")
 
 
-def run(dry_run: bool = False, limit: int = 50):
+def run(dry_run: bool = False, limit: int = 100):
     logger.info(f"=== ARIA Daily Pipeline {'(DRY RUN) ' if dry_run else ''}===")
 
     cfg = get_config()
@@ -83,9 +83,9 @@ def run(dry_run: bool = False, limit: int = 50):
         if not campaign_info.get("allow_risky_contacts", True):
             patches["allow_risky_contacts"] = True
             logger.info("Pre-flight: allow_risky_contacts=false → auto-fixing to true")
-        if campaign_info.get("daily_limit", 0) != 50:
-            patches["daily_limit"] = 50
-            logger.info(f"Pre-flight: daily_limit={campaign_info.get('daily_limit')} → auto-fixing to 50")
+        if campaign_info.get("daily_limit", 0) != 100:
+            patches["daily_limit"] = 100
+            logger.info(f"Pre-flight: daily_limit={campaign_info.get('daily_limit')} → auto-fixing to 100")
         end_date_str = campaign_info.get("end_date", "")
         if end_date_str:
             try:
@@ -296,6 +296,6 @@ def run(dry_run: bool = False, limit: int = 50):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ARIA Daily Pipeline")
     parser.add_argument("--dry-run", action="store_true", help="Run without sending anything")
-    parser.add_argument("--limit", type=int, default=50, help="Max companies to process")
+    parser.add_argument("--limit", type=int, default=100, help="Max companies to process")
     args = parser.parse_args()
     run(dry_run=args.dry_run, limit=args.limit)
