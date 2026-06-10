@@ -56,15 +56,10 @@ def fix_campaign():
 
     patches = {}
 
-    # Fix 1: allow_risky_contacts
-    if allow_risky is False:
-        patches["allow_risky_contacts"] = True
-        print("\n⚠️  allow_risky_contacts=false — tahmin edilen emailler reddediliyor!")
-        print("   → Düzeltiliyor: allow_risky_contacts=true")
-    else:
-        print("\n✅ allow_risky_contacts zaten OK")
+    # allow_risky_contacts intentionally kept false — protects domain from bounces
+    print(f"\n✅ allow_risky_contacts={allow_risky} (korunuyor — tahmin emailler gönderilmiyor)")
 
-    # Fix 2: daily_limit
+    # Fix 1: daily_limit
     if daily_limit != 100:
         patches["daily_limit"] = 100
         print(f"\n⚠️  daily_limit={daily_limit} → 100'ye çekiliyor")

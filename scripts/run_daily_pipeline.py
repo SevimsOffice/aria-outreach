@@ -41,6 +41,7 @@ from src.scraper.deduplicator import merge_sources, deduplicate, validate_and_cl
 from src.enrichment.apollo_client import ApolloClient
 from src.enrichment.hunter_client import HunterClient
 from src.enrichment.email_guesser import best_guess
+from src.enrichment.website_scraper import WebsiteEmailScraper
 from src.research.company_researcher import CompanyResearcher
 from src.outreach.email_composer import EmailComposer
 from src.outreach.instantly_client import InstantlyClient
@@ -66,6 +67,7 @@ def run(dry_run: bool = False, limit: int = 100):
 
     apollo = ApolloClient(cfg.apollo_api_key) if cfg.apollo_api_key else None
     hunter = HunterClient(cfg.hunter_api_key) if cfg.hunter_api_key else None
+    website_scraper = WebsiteEmailScraper()
     researcher = CompanyResearcher(cfg.anthropic_api_key)
     composer = EmailComposer(cfg.anthropic_api_key)
     instantly = InstantlyClient(cfg.instantly_api_key, cfg.instantly_campaign_id)
@@ -80,9 +82,7 @@ def run(dry_run: bool = False, limit: int = 100):
         # Auto-fix campaign settings before checking status
         import datetime as _dt
         patches = {}
-        if not campaign_info.get("allow_risky_contacts", True):
-            patches["allow_risky_contacts"] = True
-            logger.info("Pre-flight: allow_risky_contacts=false → auto-fixing to true")
+        # NOTE: allow_risky_contacts intentionally NOT patched — keep false to protect domain
         if campaign_info.get("daily_limit", 0) != 100:
             patches["daily_limit"] = 100
             logger.info(f"Pre-flight: daily_limit={campaign_info.get('daily_limit')} → auto-fixing to 100")
@@ -201,12 +201,18 @@ def run(dry_run: bool = False, limit: int = 100):
                     company["Domain"] = domain
                     logger.info(f"  Derived domain '{domain}' from company name")
 
-            # Apollo → Hunter → pattern guesser
-            if domain:
+            # Step 3a: Website scraper — real published emails (no guessing)
+            if domain and not contact:
+                contact = website_scraper.find_email(domain)
+
+            # Step 3b: Apollo → Hunter (verified API sources)
+            if domain and not contact:
                 if apollo:
                     contact = apollo.find_contact_by_domain(domain, name)
                 if not contact and hunter:
                     contact = hunter.find_email_by_domain(domain)
+
+            # Step 3c: Pattern guesser — ONLY as last resort, will be skipped before send
             if not contact:
                 contact = best_guess(domain=domain, company_name=name)
 
@@ -219,6 +225,11 @@ def run(dry_run: bool = False, limit: int = 100):
         last_name  = contact.get("last_name", "")
         title      = contact.get("title", "")
         source     = contact.get("source", "unknown")
+
+        # Skip guessed/pattern emails — protect domain from bounces
+        if source.startswith("guessed"):
+            logger.info(f"  Skipping {name} — guessed email ({email}), not verified")
+            continue
 
         company["Email"]        = email
         company["Contact_Name"] = f"{first_name} {last_name}".strip()
