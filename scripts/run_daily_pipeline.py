@@ -98,15 +98,26 @@ def run(dry_run: bool = False, limit: int = 100):
                     logger.info(f"Pre-flight: end_date yaklaşıyor → auto-extending to {new_end}")
             except ValueError:
                 pass
-        # If campaign is paused/stopped/draft, try to activate it automatically
-        if campaign_status in ("paused", "stopped", "draft"):
-            logger.warning(f"Pre-flight: kampanya durumu='{campaign_status}' → aktivasyon deneniyor")
-            patches["status"] = 1  # 1 = active in Instantly
         if patches:
             ok = instantly.patch_campaign(patches)
             logger.info(f"Pre-flight kampanya düzeltme: {'✓' if ok else '✗'} {patches}")
-            if "status" in patches and not ok:
+        # Activate campaign if not active (covers 'completed' too)
+        if campaign_status != "active":
+            logger.warning(f"Pre-flight: kampanya durumu='{campaign_status}' → aktivasyon deneniyor")
+            act_ok = instantly.activate_campaign()
+            logger.info(f"Pre-flight kampanya aktivasyonu: {'✓' if act_ok else '✗'}")
+            if not act_ok:
                 logger.warning("Kampanya aktivasyonu başarısız — pipeline yine de devam ediyor")
+        # Resume any paused/errored sending accounts
+        for acc in instantly.list_accounts_v2():
+            acc_email  = acc.get("email", acc.get("username", ""))
+            acc_status = acc.get("status", -99)
+            if acc_status == 2 and acc_email:
+                logger.info(f"Pre-flight: gönderici hesap paused → resume: {acc_email}")
+                instantly.resume_account(acc_email)
+            elif acc_status == -1 and acc_email:
+                logger.warning(f"Pre-flight: {acc_email} bağlantı hatası — Instantly UI'dan yeniden bağla")
+                errors.append(f"Gönderici hesap bağlantı hatası: {acc_email}")
 
         logger.info(f"Pre-flight OK: Instantly kampanya '{campaign_name}' ✓")
     else:
@@ -287,6 +298,12 @@ def run(dry_run: bool = False, limit: int = 100):
             errors.append(f"Instantly failed for {name}")
 
         time.sleep(0.5)  # Polite rate limiting
+
+    # After adding leads, re-activate campaign in case it was in 'completed' state
+    # (a campaign with no leads completes immediately; adding leads requires a new launch)
+    if emails_sent > 0 and not dry_run:
+        logger.info("Leads eklendi — kampanya tekrar aktive ediliyor (completed→active)")
+        instantly.activate_campaign()
 
     # --- Step 7: Telegram summary ---
     logger.info(f"Pipeline complete: {emails_sent} added to campaign, {len(errors)} errors")

@@ -216,9 +216,18 @@ class InstantlyClient:
         """
         Return the status of the configured campaign.
         Tries v2 API first (direct lookup by ID), falls back to v1 list scan.
-        Possible status values: 'active', 'paused', 'draft', 'stopped', 'completed', 'not_found', 'unknown'
+        Possible status values: 'active', 'paused', 'draft', 'completed', 'not_found', 'unknown'
         """
-        STATUS_MAP = {0: "draft", 1: "active", 2: "paused", 3: "stopped", 4: "completed"}
+        STATUS_MAP = {
+            0:   "draft",
+            1:   "active",
+            2:   "paused",
+            3:   "completed",
+            4:   "running_subsequences",
+            -1:  "accounts_unhealthy",
+            -2:  "bounce_protect",
+            -99: "suspended",
+        }
 
         # --- Attempt 1: v2 direct lookup by campaign ID ---
         try:
@@ -240,6 +249,7 @@ class InstantlyClient:
                     "allow_risky_contacts": data.get("allow_risky_contacts", True),
                     "end_date":             data.get("end_date", ""),
                     "daily_limit":          data.get("daily_limit", 0),
+                    "email_list":           data.get("email_list", []),
                 }
             if resp.status_code == 404:
                 logger.warning("v2 direct lookup returned 404 — campaign ID may be wrong")
@@ -291,6 +301,64 @@ class InstantlyClient:
             return True
         except requests.RequestException as e:
             logger.warning(f"Instantly campaign PATCH failed: {e}")
+            return False
+
+    def activate_campaign(self) -> bool:
+        """Launch/resume the campaign via POST /api/v2/campaigns/{id}/activate."""
+        try:
+            resp = requests.post(
+                f"{INSTANTLY_V2}/campaigns/{self._campaign_id}/activate",
+                json={},
+                headers=self._headers_v2,
+                timeout=15,
+            )
+            print(f"[INSTANTLY] POST /campaigns/{self._campaign_id}/activate {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly activate_campaign {resp.status_code}: {resp.text}")
+            if resp.status_code in (200, 201):
+                return True
+            logger.warning(f"activate_campaign unexpected status {resp.status_code}: {resp.text}")
+            return False
+        except requests.RequestException as e:
+            logger.error(f"Instantly activate_campaign error: {e}")
+            return False
+
+    def list_accounts_v2(self) -> list[dict]:
+        """
+        List email sending accounts via GET /api/v2/accounts.
+        Returns list of dicts with keys: email, status (1=active, 2=paused, -1=connection error).
+        """
+        try:
+            resp = requests.get(
+                f"{INSTANTLY_V2}/accounts",
+                params={"limit": 100},
+                headers=self._headers_v2,
+                timeout=15,
+            )
+            print(f"[INSTANTLY] GET /v2/accounts {resp.status_code} | {resp.text[:300]}", flush=True)
+            logger.info(f"Instantly GET /v2/accounts {resp.status_code}: {resp.text[:300]}")
+            if resp.status_code != 200:
+                return []
+            data = resp.json()
+            items = data.get("items", data) if isinstance(data, dict) else data
+            return items if isinstance(items, list) else []
+        except requests.RequestException as e:
+            logger.error(f"Instantly list_accounts_v2 error: {e}")
+            return []
+
+    def resume_account(self, email: str) -> bool:
+        """Resume a paused sending account via POST /api/v2/accounts/{email}/resume."""
+        try:
+            resp = requests.post(
+                f"{INSTANTLY_V2}/accounts/{email}/resume",
+                json={},
+                headers=self._headers_v2,
+                timeout=15,
+            )
+            print(f"[INSTANTLY] POST /v2/accounts/{email}/resume {resp.status_code} | {resp.text}", flush=True)
+            logger.info(f"Instantly resume_account {email} {resp.status_code}: {resp.text}")
+            return resp.status_code in (200, 201)
+        except requests.RequestException as e:
+            logger.error(f"Instantly resume_account {email} error: {e}")
             return False
 
     def list_sending_accounts(self) -> list[dict]:

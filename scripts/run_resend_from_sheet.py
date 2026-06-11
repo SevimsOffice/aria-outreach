@@ -44,7 +44,7 @@ logger = logging.getLogger("aria.resend")
 SKIP_STATUSES = {"Replied_HOT", "Replied_WARM", "Replied_COLD", "Unsubscribed"}
 
 
-def run(dry_run: bool = False, limit: int = 10):
+def run(dry_run: bool = False, limit: int = 30):
     logger.info(f"=== ARIA Resend from Sheet {'(DRY RUN) ' if dry_run else ''}— limit={limit} ===")
 
     cfg = get_config()
@@ -56,11 +56,12 @@ def run(dry_run: bool = False, limit: int = 10):
     records = sheets.get_all_records()
     logger.info(f"Sheet'te toplam {len(records)} kayıt")
 
-    # Filter: has email, not replied/unsubscribed
+    # Filter: has email, not replied/unsubscribed, not guessed (domain protection)
     candidates = [
         r for r in records
         if r.get("Email")
         and r.get("ARIA_Status", "") not in SKIP_STATUSES
+        and not (r.get("Source", "") or "").startswith("guessed")
     ]
     logger.info(f"Uygun contact sayısı: {len(candidates)} (limit: {limit})")
 
@@ -137,6 +138,6 @@ def run(dry_run: bool = False, limit: int = 10):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ARIA Resend from Sheet")
     parser.add_argument("--dry-run", action="store_true", help="Göster, gönderme")
-    parser.add_argument("--limit", type=int, default=10, help="Max kaç contact (default: 10)")
+    parser.add_argument("--limit", type=int, default=30, help="Max kaç contact (default: 30)")
     args = parser.parse_args()
     run(dry_run=args.dry_run, limit=args.limit)

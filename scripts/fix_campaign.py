@@ -1,10 +1,11 @@
 """
-One-shot script — immediately fixes Instantly campaign settings:
-  1. Enables allow_risky_contacts (so guessed emails are accepted, not silently dropped)
-  2. Sets daily_limit to 100
-  3. Extends end_date by 180 days if campaign ends within 60 days
-  4. Activates campaign if it is paused/stopped/draft
-  5. Prints a full status report
+One-shot script — hemen çalıştır, her şeyi düzelt:
+  1. Gönderici hesapları kontrol et, paused olanları resume et
+  2. Kampanyaya hesap listesi ata (email_list boşsa)
+  3. daily_limit = 100 yap
+  4. end_date < 60 gün kaldıysa 180 gün uzat
+  5. Kampanyayı aktive et (completed/paused/stopped/draft → active)
+  6. Kaç lead var, yoksa resend_from_sheet çalıştır uyarısı ver
 
 Run via GitHub Actions:
   Actions → "Fix Instantly Campaign" → Run workflow
@@ -34,7 +35,39 @@ def fix_campaign():
     print("ARIA — Instantly Campaign Fix")
     print("=" * 60)
 
-    print("\nKampanya durumu kontrol ediliyor...")
+    # ── Adım A: Gönderici hesaplar ──────────────────────────────────────
+    print("\n── Adım A: Gönderici hesaplar ──")
+    ACCOUNT_STATUS = {1: "✅ AKTİF", 2: "⛔ PAUSED", -1: "❌ bağlantı hatası", -2: "⚠️  soft bounce", -3: "❌ gönderim hatası"}
+    accounts = client.list_accounts_v2()
+    active_emails = []
+    if not accounts:
+        print("❌ Hiç gönderici hesap bulunamadı!")
+        print("   → Instantly dashboard → Email Accounts → Gmail/Outlook hesabı ekle")
+        print("   → Hesap eklendikten sonra bu scripti tekrar çalıştır")
+    else:
+        for acc in accounts:
+            email  = acc.get("email", acc.get("username", "?"))
+            status = acc.get("status", -99)
+            label  = ACCOUNT_STATUS.get(status, f"bilinmiyor({status})")
+            print(f"  {email}: {label}")
+            if status == 1:
+                active_emails.append(email)
+            elif status == 2:
+                print(f"  → Paused hesap resume ediliyor: {email}")
+                ok = client.resume_account(email)
+                if ok:
+                    print(f"     ✅ Resume başarılı")
+                    active_emails.append(email)
+                else:
+                    print(f"     ❌ Resume başarısız — Instantly UI'dan yeniden Gmail bağla")
+            elif status == -1:
+                print(f"     ❌ Bağlantı hatası — Instantly UI'dan Gmail'i yeniden yetkilendir")
+        if not active_emails:
+            print("\n❌ Aktif gönderici hesap yok — mail gönderilemez!")
+            print("   → Instantly dashboard → Email Accounts → hesabı yeniden bağla")
+
+    # ── Adım B-D: Kampanya bilgisi al ───────────────────────────────────
+    print("\n── Kampanya durumu kontrol ediliyor... ──")
     info = client.get_campaign_status()
 
     if not info.get("found"):
@@ -42,31 +75,32 @@ def fix_campaign():
         print(f"   Campaign ID: {cfg.instantly_campaign_id}")
         sys.exit(1)
 
-    name            = info.get("name", "?")
-    status          = info.get("status", "?")
-    allow_risky     = info.get("allow_risky_contacts", "?")
-    end_date_str    = info.get("end_date", "")
-    daily_limit     = info.get("daily_limit", "?")
+    name         = info.get("name", "?")
+    status       = info.get("status", "?")
+    allow_risky  = info.get("allow_risky_contacts", "?")
+    end_date_str = info.get("end_date", "")
+    daily_limit  = info.get("daily_limit", "?")
+    email_list   = info.get("email_list", [])
 
     print(f"\nKampanya: '{name}'")
     print(f"  Durum          : {status}")
     print(f"  allow_risky    : {allow_risky}")
     print(f"  end_date       : {end_date_str or '(yok)'}")
     print(f"  daily_limit    : {daily_limit}")
+    print(f"  email_list     : {email_list or '(boş)'}")
 
     patches = {}
 
-    # allow_risky_contacts intentionally kept false — protects domain from bounces
     print(f"\n✅ allow_risky_contacts={allow_risky} (korunuyor — tahmin emailler gönderilmiyor)")
 
-    # Fix 1: daily_limit
+    # Fix: daily_limit
     if daily_limit != 100:
         patches["daily_limit"] = 100
         print(f"\n⚠️  daily_limit={daily_limit} → 100'ye çekiliyor")
     else:
         print("\n✅ daily_limit zaten 100")
 
-    # Fix 3: end_date
+    # Fix: end_date
     if end_date_str:
         try:
             end = date.fromisoformat(end_date_str)
@@ -83,27 +117,48 @@ def fix_campaign():
     else:
         print("\nℹ️  end_date belirtilmemiş (süresiz)")
 
-    # Fix 4: activate if paused/stopped/draft
-    if status in ("paused", "stopped", "draft"):
-        patches["status"] = 1
-        print(f"\n⚠️  Kampanya durumu='{status}' → aktivasyon uygulanıyor (status=1)")
-    else:
-        print(f"\n✅ Kampanya durumu OK ({status})")
+    # Fix: email_list boşsa aktif hesapları ata
+    if not email_list and active_emails:
+        patches["email_list"] = active_emails
+        print(f"\n⚠️  Kampanyaya hesap atanmamış → {active_emails} atanıyor")
 
-    # Apply patches
+    # Apply setting patches
     if patches:
-        print(f"\nUygulanan düzeltmeler: {patches}")
+        print(f"\nUygulanan ayar düzeltmeleri: {patches}")
         ok = client.patch_campaign(patches)
         if ok:
-            print("✅ Kampanya başarıyla güncellendi!")
+            print("✅ Kampanya ayarları başarıyla güncellendi!")
         else:
-            print("❌ Kampanya güncellenemedi — Instantly API hatası")
-            sys.exit(1)
+            print("❌ Kampanya ayarları güncellenemedi — Instantly API hatası")
     else:
-        print("\n✅ Herhangi bir düzeltme gerekmedi")
+        print("\n✅ Ayar düzeltmesi gerekmedi")
+
+    # Aktivasyon (completed dahil tüm non-active durumlar)
+    if status != "active":
+        print(f"\n⚠️  Kampanya durumu='{status}' → aktive ediliyor")
+        ok = client.activate_campaign()
+        if ok:
+            print("✅ Kampanya aktive edildi!")
+        else:
+            print("❌ Aktivasyon başarısız — Instantly UI'dan 'Launch' / 'Resume' butonuna bas")
+    else:
+        print(f"\n✅ Kampanya durumu zaten aktif")
+
+    # Final: lead sayısı kontrol
+    print("\n── Lead sayısı kontrol ediliyor... ──")
+    leads = client.get_leads_count()
+    print(f"  Kampanyada mevcut lead sayısı: {leads}")
+    if leads == 0:
+        print("\n⚠️  Kampanyada hiç lead yok! Mail gönderilemez.")
+        print("   → GitHub Actions → 'Resend from Sheet' workflow'unu çalıştır (limit=30)")
+        print("   → Veya daily_pipeline workflow'unu çalıştır (yeni firmalar bulunur)")
 
     print("\n" + "=" * 60)
-    print("İşlem tamamlandı. Pipeline'ı şimdi çalıştırabilirsiniz.")
+    print("İşlem tamamlandı.")
+    if leads > 0:
+        print("✅ Kampanya lead'li ve aktif — yarın maillar gitmeye başlar.")
+    else:
+        print("⚠️  Lead ekledikten sonra maillar gitmeye başlar.")
     print("=" * 60)
 
 
