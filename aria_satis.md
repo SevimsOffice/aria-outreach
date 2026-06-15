@@ -169,6 +169,96 @@ aria-outreach/
 
 ---
 
+---
+
+## Neden Hiç Mail Gitmiyor? — Kök Neden Analizi (Haziran 2026)
+
+Analytics sayfası "Total sent: 0", Leads sekmesi boş, kampanya "Completed" gösteriyor.
+Üç farklı sorun aynı anda aktifti ve birbirini maskeliyordu.
+
+---
+
+### Sorun 1 — Kampanyada Hiç Lead Yok
+
+**Ekran:** Leads sekmesi boş ("Add Leads" placeholder gösteriyor).
+
+**Neden:** Pipeline geçmişte hiç lead Instantly'ye ekleyemedi. İki birbirini katlayan neden:
+- Eski pipeline kodunda `campaign not found` → hard-abort; scraping hiç başlamıyordu.
+- Verified email bulunamayan firmalar (guessed@ filtresi) Instantly'ye eklenmiyor; bu doğru bir koruma ama sonuç 0.
+
+**Düzeltme:**
+- `scripts/run_resend_from_sheet.py` — Google Sheets'teki mevcut doğrulanmış email'li firmalar Instantly'ye gönderilir (guessed@ filtresi burada da çalışır, domain korunur).
+- Varsayılan limit 30'a çıkarıldı (hesap günlük limitiyle uyumlu).
+
+---
+
+### Sorun 2 — Kampanya "Completed" Durumunda
+
+**Ekran:** Analytics → Status: `Completed`, %100 progress bar.
+
+**Neden (iki katman):**
+1. Lead'siz bir kampanya launch edilince Instantly anında "Completed" statüsüne çeker.
+2. Kod `STATUS_MAP` yanlıştı: Instantly v2'de `3=completed`, `4=running_subsequences`; eski kodda `3="stopped"`, `4="completed"` yazıyordu. Bu yüzden `campaign_status != "active"` koşulu hiç doğru çalışmıyordu.
+3. Aktivasyon yöntemi yanlıştı: `PATCH {"status": 1}` değil, Instantly'nin resmi yolu `POST /api/v2/campaigns/{id}/activate`.
+
+**Düzeltme:**
+```python
+# Eski (yanlış) STATUS_MAP
+{0: "draft", 1: "active", 2: "paused", 3: "stopped", 4: "completed"}
+
+# Yeni (doğru) STATUS_MAP
+{0: "draft", 1: "active", 2: "paused", 3: "completed", 4: "running_subsequences", ...}
+```
+- `InstantlyClient.activate_campaign()` → `POST /api/v2/campaigns/{id}/activate`
+- Aktivasyon koşulu: `status != "active"` (completed dahil hepsi)
+- Lead ekledikten sonra pipeline tekrar `activate_campaign()` çağırıyor (lead'siz completed → lead eklendi → yeniden launch)
+
+---
+
+### Sorun 3 — Gönderici Hesap PAUSED
+
+**Ekran:** Email Accounts → `sevim@aiandtech-info.com` → **Paused**, `0 of 30 sent`.
+
+**Neden:** Hesap warmup veya bağlantı kesintisi yüzünden otomatik duraklatıldı. Kampanya aktif olsa bile paused hesaptan mail çıkmaz.
+
+**Düzeltme:**
+- `InstantlyClient.list_accounts_v2()` — v2 `/accounts` ile hesap durumlarını listele
+- `InstantlyClient.resume_account(email)` — `POST /api/v2/accounts/{email}/resume`
+- `scripts/fix_campaign.py` ve `run_daily_pipeline.py` pre-flight'a eklendi: paused hesaplar otomatik resume edilir
+- Hesap "connection error" (-1) ise: otomatik resume çalışmaz, kullanıcının Instantly UI → Email Accounts → Gmail'i yeniden bağlaması gerekir (log'da uyarı çıkar)
+
+---
+
+### Sorun 4 — Domain Bounce Koruması vs. Email Bulamama
+
+Bu bir hata değil, bilinçli bir tasarım kararı. Ama etkisini bilmek gerekiyor:
+
+| Email Kaynağı | Instantly'ye Ekleniyor mu? |
+|---|---|
+| OSB site'sinden direkt (nosab_direct) | ✅ Evet |
+| Şirket web sitesinden (website scraper) | ✅ Evet |
+| Apollo.io API (ücretli plan gerekir) | ✅ Evet |
+| Hunter.io API (25/ay limit) | ✅ Evet |
+| Pattern guesser (info@tahmin.com.tr) | ❌ Hayır — bounce koruması |
+
+`allow_risky_contacts: false` intentionally korunuyor. Guessed email'ler pipeline'da ve resend script'inde filtreleniyor. Domain `aiandtech-info.com` korunuyor.
+
+---
+
+### Düzeltme Sırası (Haziran 2026)
+
+1. `src/outreach/instantly_client.py` — STATUS_MAP düzeltildi, `activate_campaign()`, `list_accounts_v2()`, `resume_account()` metodları eklendi
+2. `scripts/fix_campaign.py` — tam pre-send health check scripti (hesap, email_list, aktivasyon, lead sayısı)
+3. `scripts/run_daily_pipeline.py` — pre-flight: doğru aktivasyon + hesap resume; post-loop: lead eklendikten sonra tekrar aktivasyon
+4. `scripts/run_resend_from_sheet.py` — guessed email filtresi eklendi, limit 30'a çıkarıldı
+
+**Çalıştırma sırası:**
+1. GitHub Actions → **Fix Instantly Campaign** → hesap resume + kampanya aktive
+2. GitHub Actions → **Resend from Sheet** (limit=30) → mevcut lead'leri Instantly'ye ekle
+3. GitHub Actions → **Daily Pipeline** → yeni firmalar bul + ekle
+
+---
+
 ## Yeni OSB Eklemek
 
 Yeni bir şehir/OSB eklemek için:
