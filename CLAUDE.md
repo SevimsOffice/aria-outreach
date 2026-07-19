@@ -71,3 +71,13 @@ müşteri: Konya Teşvik (ayrı klonda). Supabase + Lovable panel Aşama 2.
 Detay: `ARIA.md` (dürüst durum değerlendirmesi) ve `aria_satis.md` (kök neden
 analizi). Bu iki dosyayı güncel tut: sistemsel bir kök neden bulunduğunda
 `aria_satis.md`'ye ekle.
+
+## AIandTech hizmet bilgi tabanı (bu repo, ARIA'nın dışında da kullanılıyor)
+
+Bu repo aynı zamanda AIandTech'in genel hizmet dokümantasyonunu barındırıyor:
+`satis_dokumani.md` (genel AI eğitim atölyesi satış dokümanı) ve
+`docs/hizmetler/` (yeni hizmet hatları — ör. **ATOM Framework / AI Governance
+danışmanlığı**, bkz. `docs/hizmetler/ai_governance_atom.md`). **Bu hizmet
+hatlarının teknik altyapısı ARIA'nın koduyla KARIŞTIRILMAZ** — ATOM için ayrı
+bir platform/repo gerekir (bkz. `docs/hizmetler/atom_teknik_yol_haritasi_notlari.md`),
+`clients/` çok-müşterili planı yalnızca ARIA outreach motoru içindir.
