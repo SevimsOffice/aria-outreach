@@ -6,7 +6,11 @@ name: ARIA Test Send 10
 on:
   push:
     branches: [claude/confident-ramanujan-cPwuq]
-    paths: ['.github/workflows/test_send_10.yml', 'scripts/deep_diagnose.py']
+    paths:
+      - '.github/workflows/test_send_10.yml'
+      - 'scripts/deep_diagnose.py'
+      - 'scripts/fix_campaign.py'
+      - 'src/outreach/instantly_client.py'
   workflow_dispatch:
 
 env:

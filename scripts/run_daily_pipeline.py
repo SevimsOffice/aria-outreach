@@ -98,6 +98,23 @@ def run(dry_run: bool = False, limit: int = 100):
                     logger.info(f"Pre-flight: end_date yaklaşıyor → auto-extending to {new_end}")
             except ValueError:
                 pass
+        # Kampanya TAKVİMİNİN kendi end_date'i dolmuşsa uzat (üst seviye end_date'ten ayrı!)
+        # Bu alan dolunca Instantly gönderimi durdurup kampanyayı 'completed'a çekiyor.
+        schedule = campaign_info.get("campaign_schedule") or {}
+        sched_end = (schedule.get("end_date") or "")[:10]
+        if sched_end:
+            try:
+                s_end = _dt.date.fromisoformat(sched_end)
+                if (s_end - _dt.date.today()).days < 60:
+                    schedule["end_date"] = (_dt.date.today() + _dt.timedelta(days=180)).isoformat()
+                    patches["campaign_schedule"] = schedule
+                    logger.warning(f"Pre-flight: takvim end_date={sched_end} dolmuş → {schedule['end_date']} olarak uzatılıyor")
+            except ValueError:
+                pass
+        # allow_risky_contacts açık kalmışsa kapat (domain koruması — Sevim'in talimatı)
+        if campaign_info.get("allow_risky_contacts") is True:
+            patches["allow_risky_contacts"] = False
+            logger.warning("Pre-flight: allow_risky_contacts=True bulundu → False'a çekiliyor")
         if patches:
             ok = instantly.patch_campaign(patches)
             logger.info(f"Pre-flight kampanya düzeltme: {'✓' if ok else '✗'} {patches}")

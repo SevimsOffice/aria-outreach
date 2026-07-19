@@ -81,6 +81,7 @@ def fix_campaign():
     end_date_str = info.get("end_date", "")
     daily_limit  = info.get("daily_limit", "?")
     email_list   = info.get("email_list", [])
+    schedule     = info.get("campaign_schedule") or {}
 
     print(f"\nKampanya: '{name}'")
     print(f"  Durum          : {status}")
@@ -91,7 +92,31 @@ def fix_campaign():
 
     patches = {}
 
-    print(f"\n✅ allow_risky_contacts={allow_risky} (korunuyor — tahmin emailler gönderilmiyor)")
+    # Fix: allow_risky_contacts KAPALI olmalı (Sevim'in talimatı — domain koruması).
+    # Tahmin adresler zaten kod tarafında filtreleniyor; Instantly tarafı da kapalı dursun.
+    if allow_risky is True:
+        patches["allow_risky_contacts"] = False
+        print(f"\n⚠️  allow_risky_contacts=True bulundu → False'a çekiliyor (domain koruması)")
+    else:
+        print(f"\n✅ allow_risky_contacts={allow_risky} (kapalı — tahmin emailler gönderilmiyor)")
+
+    # Fix: KAMPANYA TAKVİMİNİN kendi end_date'i (üst seviye end_date'ten AYRI alan!)
+    # Haziran 2026'da bulunan kök neden: schedule end_date dolunca Instantly hiçbir şey
+    # göndermiyor ve kampanyayı her gün 'completed'a çekiyor.
+    sched_end = (schedule.get("end_date") or "")[:10]
+    if sched_end:
+        try:
+            s_end = date.fromisoformat(sched_end)
+            s_days_left = (s_end - date.today()).days
+            if s_days_left < 60:
+                schedule["end_date"] = (date.today() + timedelta(days=180)).isoformat()
+                patches["campaign_schedule"] = schedule
+                print(f"\n⚠️  TAKVİM süresi dolmuş/doluyor (schedule end_date={sched_end}, {s_days_left} gün)")
+                print(f"   → schedule end_date={schedule['end_date']} olarak uzatılıyor")
+            else:
+                print(f"\n✅ Takvim end_date OK ({sched_end}, {s_days_left} gün kaldı)")
+        except ValueError:
+            print(f"\n⚠️  Takvim end_date parse edilemedi: {sched_end}")
 
     # Fix: daily_limit
     if daily_limit != 100:

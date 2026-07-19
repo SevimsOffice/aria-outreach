@@ -197,19 +197,25 @@ class InstantlyClient:
             return []
 
     def get_leads_count(self) -> int:
-        """How many leads are currently in the campaign."""
+        """
+        How many leads are currently in the campaign (v2 POST /leads/list).
+        Returns count of first 100 — yeterli: 0 mu değil mi onu bilmek istiyoruz.
+        NOT: v1 GET /lead/list Instantly tarafından kaldırıldı (404 dönüyor).
+        """
         try:
-            resp = requests.get(
-                f"{INSTANTLY_V1}/lead/list",
-                params=self._v1_params({"campaign_id": self._campaign_id, "limit": 1}),
-                headers=self._headers_v1,
+            resp = requests.post(
+                f"{INSTANTLY_V2}/leads/list",
+                json={"campaign": self._campaign_id, "limit": 100},
+                headers=self._headers_v2,
                 timeout=15,
             )
-            print(f"[INSTANTLY] GET /lead/list {resp.status_code} | {resp.text}", flush=True)
-            logger.info(f"Instantly GET /lead/list {resp.status_code}: {resp.text}")
+            print(f"[INSTANTLY] POST /v2/leads/list {resp.status_code} | {resp.text[:200]}", flush=True)
+            logger.info(f"Instantly POST /v2/leads/list {resp.status_code}: {resp.text[:200]}")
             resp.raise_for_status()
-            return resp.json().get("total", 0)
-        except requests.RequestException:
+            items = resp.json().get("items", [])
+            return len(items)
+        except requests.RequestException as e:
+            logger.error(f"Instantly get_leads_count error: {e}")
             return 0
 
     def get_campaign_status(self) -> dict:
@@ -250,6 +256,7 @@ class InstantlyClient:
                     "end_date":             data.get("end_date", ""),
                     "daily_limit":          data.get("daily_limit", 0),
                     "email_list":           data.get("email_list", []),
+                    "campaign_schedule":    data.get("campaign_schedule") or {},
                 }
             if resp.status_code == 404:
                 logger.warning("v2 direct lookup returned 404 — campaign ID may be wrong")
