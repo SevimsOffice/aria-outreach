@@ -65,7 +65,9 @@ class InstantlyClient:
         Personalization: {{personalization}} variable in email template.
         """
         payload = {
-            "campaign_id":    self._campaign_id,
+            # v2 API'de alan adı "campaign" — "campaign_id" sessizce YOK SAYILIYOR
+            # ve lead kampanyaya bağlanmadan oluşuyor (Temmuz 2026 kök bulgusu).
+            "campaign":       self._campaign_id,
             "email":          email,
             "first_name":     first_name or "",
             "last_name":      last_name or "",
