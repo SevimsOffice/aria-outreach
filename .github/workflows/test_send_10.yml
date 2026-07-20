@@ -2,6 +2,7 @@ name: ARIA Test Send 10
 
 # Geçici çalıştırma workflow'u: deep diagnose → kampanya onarımı → Sheet'ten gönderim.
 # Bu branch'e her push'ta çalışır; Actions sekmesinden elle de tetiklenebilir.
+# (yeniden tetikleme: Instantly 402 hatasını doğrulamak için)
 
 on:
   push:
