@@ -1,6 +1,6 @@
 name: ARIA Test Send 10
 
-# Geçici test workflow'u: deep diagnose → kampanya onarımı → 10 mail denemesi.
+# Geçici çalıştırma workflow'u: deep diagnose → kampanya onarımı → Sheet'ten gönderim.
 # Bu branch'e her push'ta çalışır; Actions sekmesinden elle de tetiklenebilir.
 
 on:
@@ -51,7 +51,7 @@ jobs:
           TELEGRAM_CHAT_ID:             ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python scripts/fix_campaign.py
 
-      - name: Resend from sheet (limit 10)
+      - name: Resend from sheet (limit 50)
         env:
           ANTHROPIC_API_KEY:            ${{ secrets.ANTHROPIC_API_KEY }}
           GOOGLE_SERVICE_ACCOUNT_JSON:  ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
@@ -60,7 +60,7 @@ jobs:
           INSTANTLY_CAMPAIGN_ID:        ${{ secrets.INSTANTLY_CAMPAIGN_ID }}
           TELEGRAM_BOT_TOKEN:           ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:             ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python scripts/run_resend_from_sheet.py --limit 10
+        run: python scripts/run_resend_from_sheet.py --limit 50
 
       - name: Deep diagnose (after)
         env:
