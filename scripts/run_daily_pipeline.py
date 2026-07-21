@@ -1,15 +1,16 @@
 """
 ARIA Daily Pipeline — runs every morning at 7 AM Turkey time via GitHub Actions.
 
-Flow:
+Flow (SEND_MODE=smtp, varsayılan — Instantly aboneliği Temmuz 2026'da
+iptal edildi, gönderim artık scripts/run_send_smtp.py'de):
   1. Scrape NOSAB + DOSAB + KAYAPA OSB websites for new companies
   2. Deduplicate against master sheet
-  3. Enrich each new company with email (Apollo → Hunter → guesser)
-  4. Research each company website (Claude Haiku)
-  5. Generate personalized email opening (Claude Haiku)
-  6. Add to Instantly.ai campaign
-  7. Update Google Sheets with status
-  8. Send Telegram daily summary
+  3. Enrich each new company with email (website scraper → Apollo → Hunter → guesser)
+  4. Write verified prospects to Google Sheet (ARIA_Status boş — gönderim beklemede)
+  5. Send Telegram daily summary
+
+SEND_MODE=instantly (eski davranış, kod korunuyor — abonelik yenilenirse):
+  3. Research + compose + Instantly.ai kampanyasına ekleme adımları da çalışır.
 
 Usage:
   python scripts/run_daily_pipeline.py
@@ -56,7 +57,8 @@ logger = logging.getLogger("aria.daily")
 
 
 def run(dry_run: bool = False, limit: int = 100):
-    logger.info(f"=== ARIA Daily Pipeline {'(DRY RUN) ' if dry_run else ''}===")
+    send_mode = os.environ.get("SEND_MODE", "smtp").strip().lower()
+    logger.info(f"=== ARIA Daily Pipeline {'(DRY RUN) ' if dry_run else ''}(SEND_MODE={send_mode}) ===")
 
     cfg = get_config()
     errors = []
@@ -68,17 +70,20 @@ def run(dry_run: bool = False, limit: int = 100):
     apollo = ApolloClient(cfg.apollo_api_key) if cfg.apollo_api_key else None
     hunter = HunterClient(cfg.hunter_api_key) if cfg.hunter_api_key else None
     website_scraper = WebsiteEmailScraper()
-    researcher = CompanyResearcher(cfg.anthropic_api_key)
-    composer = EmailComposer(cfg.anthropic_api_key)
-    instantly = InstantlyClient(cfg.instantly_api_key, cfg.instantly_campaign_id)
     telegram = TelegramNotifier(cfg.telegram_bot_token, cfg.telegram_chat_id)
 
-    # --- Pre-flight: verify Instantly campaign is active ---
-    campaign_info   = instantly.get_campaign_status()
+    researcher = composer = instantly = None
+    if send_mode == "instantly":
+        researcher = CompanyResearcher(cfg.anthropic_api_key)
+        composer = EmailComposer(cfg.anthropic_api_key)
+        instantly = InstantlyClient(cfg.instantly_api_key, cfg.instantly_campaign_id)
+
+    # --- Pre-flight: verify Instantly campaign is active (instantly modunda) ---
+    campaign_info   = instantly.get_campaign_status() if instantly else {}
     campaign_status = campaign_info.get("status", "unknown")
     campaign_name   = campaign_info.get("name", "?")
 
-    if campaign_info.get("found"):
+    if instantly and campaign_info.get("found"):
         # Auto-fix campaign settings before checking status
         import datetime as _dt
         patches = {}
@@ -137,7 +142,7 @@ def run(dry_run: bool = False, limit: int = 100):
                 errors.append(f"Gönderici hesap bağlantı hatası: {acc_email}")
 
         logger.info(f"Pre-flight OK: Instantly kampanya '{campaign_name}' ✓")
-    else:
+    elif instantly:
         # Could not confirm status (API list miss or v1/v2 both failed) — warn but continue.
         # The add_contact call itself will surface any real auth/ID errors.
         logger.warning(
@@ -265,73 +270,84 @@ def run(dry_run: bool = False, limit: int = 100):
 
         logger.info(f"  Email: {email} (source: {source})")
 
-        # Step 4: Research company
-        research = researcher.research(name, domain, sector, osb)
-
-        # Step 5: Compose personalized email
-        email_content = composer.compose_initial(
-            company_name=name,
-            sector=sector,
-            osb=osb,
-            city=city,
-            main_activity=research["main_activity"],
-            pain_points=research["likely_pain_points"],
-            contact_name=f"{first_name} {last_name}".strip(),
-        )
-
-        logger.info(f"  Subject: {email_content['subject']}")
-        logger.info(f"  Personalized line: {email_content['personalized_line'][:80]}...")
-
         if dry_run:
-            logger.info(f"  [DRY RUN] Would add to Instantly campaign")
+            action = "Would write to Sheet (SMTP modu)" if send_mode != "instantly" else "Would add to Instantly campaign"
+            logger.info(f"  [DRY RUN] {action}")
             new_prospects_added += 1
             continue
 
-        # Step 6: Add to Instantly campaign
-        result = instantly.add_contact(
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-            company_name=name,
-            personalized_line=email_content["personalized_line"],
-            sector=sector,
-            osb=osb,
-        )
+        if send_mode == "instantly":
+            # Step 4: Research company
+            research = researcher.research(name, domain, sector, osb)
 
-        if result:
-            emails_sent += 1
-            new_prospects_added += 1
-            # Update Google Sheet
-            sheets.add_prospects([company])
-            sheets.update_status(
-                domain=domain,
-                email=email,       # Fallback for NOSAB companies with no domain
-                fields={
-                    "ARIA_Status": "Added_to_Instantly",
-                    "Email1_Date": __import__("datetime").date.today().isoformat(),
-                },
+            # Step 5: Compose personalized email
+            email_content = composer.compose_initial(
+                company_name=name,
+                sector=sector,
+                osb=osb,
+                city=city,
+                main_activity=research["main_activity"],
+                pain_points=research["likely_pain_points"],
+                contact_name=f"{first_name} {last_name}".strip(),
             )
+            logger.info(f"  Subject: {email_content['subject']}")
+            logger.info(f"  Personalized line: {email_content['personalized_line'][:80]}...")
+
+            # Step 6: Add to Instantly campaign
+            result = instantly.add_contact(
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                company_name=name,
+                personalized_line=email_content["personalized_line"],
+                sector=sector,
+                osb=osb,
+            )
+
+            if result:
+                emails_sent += 1
+                new_prospects_added += 1
+                sheets.add_prospects([company])
+                sheets.update_status(
+                    domain=domain,
+                    email=email,       # Fallback for NOSAB companies with no domain
+                    fields={
+                        "ARIA_Status": "Added_to_Instantly",
+                        "Email1_Date": __import__("datetime").date.today().isoformat(),
+                    },
+                )
+            else:
+                errors.append(f"Instantly failed for {name}")
         else:
-            errors.append(f"Instantly failed for {name}")
+            # SMTP modu: burada göndermiyoruz — Sheet'e ARIA_Status boş olarak
+            # yazıyoruz, gerçek gönderim scripts/run_send_smtp.py'nin işi
+            # (takip zamanlaması ve tempolamayı orada yapıyoruz).
+            sheets.add_prospects([company])
+            new_prospects_added += 1
+            logger.info(f"  Sheet'e eklendi — gönderim run_send_smtp.py ile yapılacak")
 
         time.sleep(0.5)  # Polite rate limiting
 
     # After adding leads, re-activate campaign in case it was in 'completed' state
     # (a campaign with no leads completes immediately; adding leads requires a new launch)
-    if emails_sent > 0 and not dry_run:
+    if send_mode == "instantly" and emails_sent > 0 and not dry_run:
         logger.info("Leads eklendi — kampanya tekrar aktive ediliyor (completed→active)")
         instantly.activate_campaign()
 
     # --- Step 7: Telegram summary ---
-    logger.info(f"Pipeline complete: {emails_sent} added to campaign, {len(errors)} errors")
+    logger.info(f"Pipeline complete: {new_prospects_added} new prospects, {len(errors)} errors")
 
     if not dry_run:
         telegram.send_daily_summary(
             new_prospects_found=len(all_scraped),
-            emails_sent=emails_sent,
+            emails_sent=(emails_sent if send_mode == "instantly" else new_prospects_added),
             replies_today=0,  # Handled by reply_handler
             hot_leads_today=0,
             errors=errors if errors else None,
+            sent_label=(
+                "Instantly kampanyasına eklendi" if send_mode == "instantly"
+                else "Sheet'e eklendi (gönderim bekliyor)"
+            ),
         )
 
     logger.info("=== Done ===")

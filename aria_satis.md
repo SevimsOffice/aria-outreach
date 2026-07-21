@@ -259,6 +259,31 @@ Bu bir hata değil, bilinçli bir tasarım kararı. Ama etkisini bilmek gerekiyo
 
 ---
 
+## Sorun 5 — Instantly Aboneliği İptal Oldu (Temmuz 2026)
+
+Yukarıdaki tüm düzeltmeler doğruydu ve çalıştı (20 Temmuz sabahı 3 ayrı test
+çalıştırmasında toplam 30 lead başarıyla Instantly'ye eklendi — payload'da
+`campaign_id` yerine `campaign` alan adı gerektiği de bu sırada bulunup
+düzeltildi). Aynı gün ilerleyen saatlerde tüm Instantly API çağrıları
+**`402 Payment Required — "Workspace does not have an active paid plan"`**
+dönmeye başladı. Kod hatası değil — Sevim aboneliği iptal etti (bütçe kararı).
+
+**Kalıcı çözüm — Instantly'den SMTP'ye geçiş:** Gönderim artık Sevim'in kendi
+Hostinger mailbox'ından `smtplib` ile yapılıyor:
+- `src/outreach/smtp_sender.py` — düz metin gönderim, warmup yok
+- `scripts/run_send_smtp.py` — Sheet'ten ilk mail + 2 takip, tempolama (45-90sn
+  arası bekleme), günlük limit varsayılan 20 (warmup olmadığı için düşük)
+- `scripts/run_daily_pipeline.py` artık `SEND_MODE=smtp` (varsayılan) ile
+  çalışır — Instantly'ye hiç dokunmaz, sadece Sheet'e yazar
+- Instantly kodu SİLİNMEDİ, `SEND_MODE=instantly` ile hâlâ erişilebilir —
+  abonelik yenilenirse tek env değişikliğiyle geri dönülür
+
+**Kaybedilen özellikler (dürüst not):** warmup altyapısı, açılma (open) takibi,
+Instantly unibox'ı (yanıtlar artık doğrudan Hostinger gelen kutusuna düşüyor —
+IMAP polling entegrasyonu Faz 2, henüz yapılmadı).
+
+---
+
 ## Yeni OSB Eklemek
 
 Yeni bir şehir/OSB eklemek için:

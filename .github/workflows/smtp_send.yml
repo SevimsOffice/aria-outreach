@@ -1,0 +1,70 @@
+name: ARIA SMTP Gönderim
+
+# Instantly aboneliği iptal edildi (Temmuz 2026) — bu workflow Hostinger
+# mailbox'ından doğrudan gönderim yapar. Cron main'e taşınana kadar bu
+# branch'e push'ta da tetiklenir (doğrulama amaçlı, geçici).
+
+on:
+  schedule:
+    - cron: '30 6 * * 1-5'   # 09:30 Türkiye, hafta içi
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Kaç mail gönderilsin (günlük, warmup yok — düşük tut)'
+        required: false
+        default: '20'
+      dry_run:
+        description: 'Dry run (gönderme, sadece göster)'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+  push:
+    branches: [claude/confident-ramanujan-cPwuq]
+    paths:
+      - '.github/workflows/smtp_send.yml'
+      - 'scripts/run_send_smtp.py'
+      - 'src/outreach/smtp_sender.py'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run ARIA SMTP send
+        env:
+          ANTHROPIC_API_KEY:            ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_SERVICE_ACCOUNT_JSON:  ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_SHEET_ID:              ${{ secrets.GOOGLE_SHEET_ID }}
+          TELEGRAM_BOT_TOKEN:           ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:             ${{ secrets.TELEGRAM_CHAT_ID }}
+          SMTP_HOST:                    ${{ secrets.SMTP_HOST }}
+          SMTP_PORT:                    ${{ secrets.SMTP_PORT }}
+          SMTP_USER:                    ${{ secrets.SMTP_USER }}
+          SMTP_PASS:                    ${{ secrets.SMTP_PASS }}
+          SMTP_FROM_NAME:               ${{ secrets.SMTP_FROM_NAME }}
+          TEST_RECIPIENT:               ${{ secrets.TEST_RECIPIENT }}
+        run: |
+          LIMIT="${{ github.event.inputs.limit || '20' }}"
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+          if [ "$DRY_RUN" = "true" ]; then
+            python scripts/run_send_smtp.py --dry-run --limit "$LIMIT"
+          else
+            python scripts/run_send_smtp.py --limit "$LIMIT"
+          fi

@@ -65,13 +65,14 @@ class TelegramNotifier:
         replies_today: int,
         hot_leads_today: int,
         errors: list[str] = None,
+        sent_label: str = "Instantly kampanyasına eklendi",
     ):
         today = date.today().strftime("%d %B %Y")
         status = "✅" if not errors else "⚠️"
         msg = (
             f"{status} *ARIA Günlük Özet — {today}*\n\n"
             f"🔍 Yeni firma bulundu: *{new_prospects_found}*\n"
-            f"📤 Instantly kampanyasına eklendi: *{emails_sent}*\n"
+            f"📤 {_esc(sent_label)}: *{emails_sent}*\n"
             f"📬 Yeni yanıt: *{replies_today}*\n"
             f"🔥 Sıcak lead: *{hot_leads_today}*\n"
         )

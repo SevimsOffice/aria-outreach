@@ -40,11 +40,13 @@ jobs:
 
       - name: Run ARIA daily pipeline
         env:
+          # SEND_MODE=smtp (varsayılan): Instantly'ye hiç dokunmaz, sadece
+          # scrape→enrich→Sheet yazar. Gönderim smtp_send.yml'nin işi.
+          # Instantly aboneliği yenilenirse SEND_MODE=instantly'ye çevrilebilir.
+          SEND_MODE:                    smtp
           ANTHROPIC_API_KEY:            ${{ secrets.ANTHROPIC_API_KEY }}
           GOOGLE_SERVICE_ACCOUNT_JSON:  ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           GOOGLE_SHEET_ID:              ${{ secrets.GOOGLE_SHEET_ID }}
-          INSTANTLY_API_KEY:            ${{ secrets.INSTANTLY_API_KEY }}
-          INSTANTLY_CAMPAIGN_ID:        ${{ secrets.INSTANTLY_CAMPAIGN_ID }}
           APOLLO_API_KEY:               ${{ secrets.APOLLO_API_KEY }}
           HUNTER_API_KEY:               ${{ secrets.HUNTER_API_KEY }}
           TELEGRAM_BOT_TOKEN:           ${{ secrets.TELEGRAM_BOT_TOKEN }}
