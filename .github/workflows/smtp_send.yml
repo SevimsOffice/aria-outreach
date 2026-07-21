@@ -3,6 +3,7 @@ name: ARIA SMTP Gönderim
 # Instantly aboneliği iptal edildi (Temmuz 2026) — bu workflow Hostinger
 # mailbox'ından doğrudan gönderim yapar. Cron main'e taşınana kadar bu
 # branch'e push'ta da tetiklenir (doğrulama amaçlı, geçici).
+# (SMTP_PASS secret'ı güncellendi — yeniden deneniyor)
 
 on:
   schedule:
