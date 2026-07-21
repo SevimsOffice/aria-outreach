@@ -66,8 +66,8 @@ jobs:
           # oturumda izinli değil) — doğrulama sırasında push her zaman
           # dry-run'a zorlanır, gerçek gönderim yalnızca cron/dispatch'te olur.
           if [ "${{ github.event_name }}" = "push" ]; then
-            echo "push tetiklemesi — SMTP doğrulama: TEST_RECIPIENT'a 1 gerçek mail"
-            python scripts/run_send_smtp.py --limit 1 --to-test-recipient
+            echo "push tetiklemesi — Sevim onayıyla 20 gerçek gönderim"
+            python scripts/run_send_smtp.py --limit 20
           else
             LIMIT="${{ github.event.inputs.limit || '20' }}"
             DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"

@@ -5,7 +5,8 @@ Master sheet structure (tab: "ARIA_Prospects"):
   Company_Name, Sector, Domain, Phone, Address, OSB,
   Contact_Name, Email, Source, Added_Date,
   ARIA_Status, Email1_Date, Email2_Date, Email3_Date,
-  Instantly_Contact_ID, Reply_Date, Reply_Category, Hot_Lead
+  Instantly_Contact_ID, Reply_Date, Reply_Category, Hot_Lead,
+  Email1_Content, Email2_Content, Email3_Content
 """
 
 import json
@@ -26,6 +27,10 @@ COLUMNS = [
     "Contact_Name", "Email", "Source", "Added_Date",
     "ARIA_Status", "Email1_Date", "Email2_Date", "Email3_Date",
     "Instantly_Contact_ID", "Reply_Date", "Reply_Category", "Hot_Lead",
+    # Gönderilen mailin tam metni (konu + gövde) — kayıt/denetim amaçlı.
+    # Yeni kolonlar her zaman SONA eklenir; ortaya eklemek update_status'un
+    # index hesaplamasını (COLUMNS.index) bozar.
+    "Email1_Content", "Email2_Content", "Email3_Content",
 ]
 
 SCOPES = [
@@ -62,6 +67,16 @@ class SheetsClient:
             existing = ws.row_values(1)
             if not existing:
                 ws.insert_row(headers, index=1)
+            else:
+                # Sheet zaten var ve satır dolu — COLUMNS'a yeni kolon
+                # eklendiyse (ör. Email1_Content) mevcut veriyi bozmadan
+                # eksik başlıkları sona ekle.
+                missing = [h for h in headers if h not in existing]
+                if missing:
+                    start_col = len(existing) + 1
+                    for i, h in enumerate(missing):
+                        ws.update_cell(1, start_col + i, h)
+                    logger.info(f"{tab_name}: eksik kolonlar eklendi: {missing}")
         except gspread.WorksheetNotFound:
             ws = self._spreadsheet.add_worksheet(title=tab_name, rows=5000, cols=len(headers))
             ws.insert_row(headers, index=1)
@@ -143,6 +158,7 @@ class SheetsClient:
                 "", "", "",  # Email dates
                 "",  # Instantly_Contact_ID
                 "", "", "",  # Reply fields
+                "", "", "",  # Email content (Email1/2/3_Content)
             ]
             rows.append(row)
         self._ws.append_rows(rows, value_input_option="USER_ENTERED")

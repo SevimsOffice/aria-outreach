@@ -175,15 +175,15 @@ def run(dry_run: bool = False, limit: int = 20, use_ai: bool = False, to_test_re
                     sector=sector,
                 )
                 content = {"subject": f"{name} için yapay zeka verimlilik atölyesi", "body": body}
-            status_field, date_field = "Email1_Sent", "Email1_Date"
+            status_field, date_field, content_field = "Email1_Sent", "Email1_Date", "Email1_Content"
         elif stage == "followup1":
             tmp = EmailComposer(cfg.anthropic_api_key) if composer is None else composer
             content = tmp.compose_followup1(company_name=name, sector=sector, contact_name=contact_name)
-            status_field, date_field = "Email2_Sent", "Email2_Date"
+            status_field, date_field, content_field = "Email2_Sent", "Email2_Date", "Email2_Content"
         else:  # followup2
             tmp = EmailComposer(cfg.anthropic_api_key) if composer is None else composer
             content = tmp.compose_followup2(company_name=name, sector=sector, contact_name=contact_name)
-            status_field, date_field = "Email3_Sent", "Email3_Date"
+            status_field, date_field, content_field = "Email3_Sent", "Email3_Date", "Email3_Content"
 
         recipient = cfg.test_recipient if to_test_recipient else email
         logger.info(f"[{i+1}/{len(work_queue)}] ({stage}) {name} <{recipient}> — {content['subject']}")
@@ -201,7 +201,11 @@ def run(dry_run: bool = False, limit: int = 20, use_ai: bool = False, to_test_re
             if not to_test_recipient:
                 sheets.update_status(
                     domain=domain, email=email,
-                    fields={"ARIA_Status": status_field, date_field: date.today().isoformat()},
+                    fields={
+                        "ARIA_Status": status_field,
+                        date_field: date.today().isoformat(),
+                        content_field: f"Konu: {content['subject']}\n\n{content['body']}",
+                    },
                 )
             logger.info("  Gönderildi ✓")
         else:
