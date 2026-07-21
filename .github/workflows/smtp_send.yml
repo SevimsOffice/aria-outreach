@@ -61,10 +61,18 @@ jobs:
           SMTP_FROM_NAME:               ${{ secrets.SMTP_FROM_NAME }}
           TEST_RECIPIENT:               ${{ secrets.TEST_RECIPIENT }}
         run: |
-          LIMIT="${{ github.event.inputs.limit || '20' }}"
-          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
-          if [ "$DRY_RUN" = "true" ]; then
-            python scripts/run_send_smtp.py --dry-run --limit "$LIMIT"
+          # push-tetiklemesi manuel input alamıyor (workflow_dispatch API bu
+          # oturumda izinli değil) — doğrulama sırasında push her zaman
+          # dry-run'a zorlanır, gerçek gönderim yalnızca cron/dispatch'te olur.
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "push tetiklemesi — güvenlik için dry-run'a zorlandı"
+            python scripts/run_send_smtp.py --dry-run --limit 5
           else
-            python scripts/run_send_smtp.py --limit "$LIMIT"
+            LIMIT="${{ github.event.inputs.limit || '20' }}"
+            DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+            if [ "$DRY_RUN" = "true" ]; then
+              python scripts/run_send_smtp.py --dry-run --limit "$LIMIT"
+            else
+              python scripts/run_send_smtp.py --limit "$LIMIT"
+            fi
           fi
