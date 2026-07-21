@@ -74,6 +74,9 @@ class SheetsClient:
                 missing = [h for h in headers if h not in existing]
                 if missing:
                     start_col = len(existing) + 1
+                    end_col = start_col + len(missing) - 1
+                    if end_col > ws.col_count:
+                        ws.add_cols(end_col - ws.col_count)
                     for i, h in enumerate(missing):
                         ws.update_cell(1, start_col + i, h)
                     logger.info(f"{tab_name}: eksik kolonlar eklendi: {missing}")
