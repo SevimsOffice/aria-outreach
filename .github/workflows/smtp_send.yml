@@ -26,6 +26,7 @@ on:
       - '.github/workflows/smtp_send.yml'
       - 'scripts/run_send_smtp.py'
       - 'src/outreach/smtp_sender.py'
+      - 'src/database/sheets_client.py'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
